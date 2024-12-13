@@ -41,7 +41,7 @@ To run the compression algorithm, modify the DNAClassification class according t
   2. **Adjust Parameters:** Change parameters such as generations, and topSubsequences (this is given as input when running the code) based on your requirements.
   3. **Run the Program:** Execute the main method to start the compression process.
 <pre>
-  java -cp target/HMG-1.0-SNAPSHOT.jar dna.GMG
+  java -cp target/HMG-1.0-SNAPSHOT.jar dna.HMG
 </pre>
 
 ## Contributions 
