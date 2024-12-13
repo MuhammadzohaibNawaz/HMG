@@ -48,5 +48,5 @@ To run the compression algorithm, modify the DNAClassification class according t
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
 ## Acknowledgments 
-1. The development of this compression algorithm was inspired by the need for efficient genomic data storage.
-2. Thanks to the BioPython library for its tools and resources for handling biological data.
+The development of this compression algorithm was inspired by the need for efficient genomic data storage.
+
