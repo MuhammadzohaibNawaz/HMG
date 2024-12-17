@@ -36,7 +36,7 @@ public class GACompression {
         List<String> chromosomeFiles = null;
         String folderPath = null;
         List<String> dnaSequences = new ArrayList<>();
-        folderPath = "Data/geco/DS5";
+        folderPath = "Data/;
         chromosomeFiles = Arrays.asList(DS);
 
         int maxEntryLength = 1;
