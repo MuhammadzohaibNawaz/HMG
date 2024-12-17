@@ -32,7 +32,7 @@ public class GACompression {
         int longestPattern = 5;
         int comb = 1;
         Map<String, Character> sequenceToCodeMap = new HashMap<>();
-        String DS = "AgPh";// enter dataset name here
+        String DS = "sample";// enter dataset name here
         List<String> chromosomeFiles = null;
         String folderPath = null;
         List<String> dnaSequences = new ArrayList<>();
@@ -772,9 +772,13 @@ public class GACompression {
         try {
             // 1. Create frequency map
             Map<Character, Integer> freqMap = new HashMap<>();
+            int totalSequences = 0;  // Track total sequences to encode
+            
+            // First pass: count frequencies and total sequences
             for (String seq : dnaSequences) {
                 for (char c : seq.toCharArray()) {
                     freqMap.merge(c, 1, Integer::sum);
+                    totalSequences++;
                 }
             }
 
@@ -782,51 +786,50 @@ public class GACompression {
             HuffmanTree huffman = new HuffmanTree(freqMap);
             Map<Character, String> huffmanCodes = huffman.getCodes();
 
-            HuffmanTree huffmanTree = new HuffmanTree(freqMap);
-            Map<Character, String> codes = huffmanTree.getCodes();
-            boolean isPrefixFree = areCodesPrefixFree(codes);
+            boolean isPrefixFree = areCodesPrefixFree(huffmanCodes);
             System.out.println("Are codes prefix-free? " + isPrefixFree);
-            // 3. Save dictionary and Huffman tables
+
+            // 3. Save dictionary with clear format
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"))) {
-                // Save substitution patterns
                 writer.write("=== SUBSTITUTION TABLE ===\n");
                 for (Map.Entry<String, Character> entry : sequenceToCodeMap.entrySet()) {
                     writer.write(entry.getValue() + ":" + entry.getKey() + "\n");
                 }
-
-                // Save Huffman codes
-                writer.write("=== HUFFMAN TABLE ===\n");
+                writer.write("\n=== HUFFMAN TABLE ===\n");
                 for (Map.Entry<Character, String> entry : huffmanCodes.entrySet()) {
                     writer.write(entry.getKey() + ":" + entry.getValue() + "\n");
                 }
             }
 
-            // 4. Save compressed data in chunks
+            // 4. Save compressed data with proper bit handling
             try (DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
-                int totalBits = 0;
+                // Write total number of sequences at the start
+                out.writeInt(totalSequences);
+                
                 StringBuilder bitStream = new StringBuilder();
+                int bitsWritten = 0;
 
+                // Process each sequence
                 for (String seq : dnaSequences) {
                     for (char c : seq.toCharArray()) {
                         String code = huffmanCodes.get(c);
-                        bitStream.append(code);
-                        totalBits += code.length();
-
-                        // Write in chunks to avoid memory issues
-                        if (bitStream.length() >= 8192) { // 8KB chunk size
-                            writeBits(out, bitStream);
-                            bitStream.setLength(0); // Clear the buffer
+                        if (code != null) {
+                            bitStream.append(code);
+                            bitsWritten += code.length();
+                            
+                            // Write in chunks when buffer is large enough
+                            if (bitStream.length() >= 8192) {
+                                writeBitsExact(out, bitStream, false);
+                                bitStream.setLength(0);
+                            }
                         }
                     }
                 }
 
-                // Write remaining bits
+                // Write remaining bits with proper padding
                 if (bitStream.length() > 0) {
-                    writeBits(out, bitStream);
+                    writeBitsExact(out, bitStream, true);
                 }
-
-                // Write total bits at the start
-                out.writeInt(totalBits);
             }
 
             // 5. Print file sizes
@@ -848,12 +851,13 @@ public class GACompression {
         }
     }
 
-    private static void writeBits(DataOutputStream out, StringBuilder bitStream) throws IOException {
+    private static void writeBitsExact(DataOutputStream out, StringBuilder bitStream, boolean isLast) throws IOException {
+        int remainingBits = bitStream.length();
         int currentByte = 0;
         int bitsInCurrentByte = 0;
 
-        for (char bit : bitStream.toString().toCharArray()) {
-            currentByte = (currentByte << 1) | (bit == '1' ? 1 : 0);
+        for (int i = 0; i < remainingBits; i++) {
+            currentByte = (currentByte << 1) | (bitStream.charAt(i) == '1' ? 1 : 0);
             bitsInCurrentByte++;
 
             if (bitsInCurrentByte == 8) {
@@ -863,9 +867,9 @@ public class GACompression {
             }
         }
 
-        // Write remaining bits with padding
-        if (bitsInCurrentByte > 0) {
-            currentByte <<= (8 - bitsInCurrentByte);
+        // Handle last byte with explicit padding if needed
+        if (isLast && bitsInCurrentByte > 0) {
+            currentByte <<= (8 - bitsInCurrentByte);  // Left-align remaining bits
             out.write(currentByte);
         }
     }
