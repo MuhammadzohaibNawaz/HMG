@@ -5,8 +5,8 @@ import java.util.*;
 
 public class Decompression {
     public static void main(String[] args) {
-        String datasetName = "AgPh"; // Change this to match your dataset name
-        String folderPath = "Data/geco/DS5/";
+        String datasetName = "sample"; // Change this to match your dataset name
+        String folderPath = "Data/";
         String compressedFilePath = folderPath + "output/" + datasetName + "_compressed.bin";
         String dictionaryFilePath = folderPath + "output/" + datasetName + "_compressed.dict";
         String outputFilePath = folderPath + "output/" + datasetName + "_decompressed.txt";
@@ -74,42 +74,89 @@ public class Decompression {
         
         try (DataInputStream in = new DataInputStream(new FileInputStream(filePath))) {
             int numSequences = in.readInt();
+            int sequencesDecoded = 0;
             
-            while (in.available() > 0) {
-                int currentByte = in.read();
-                for (int i = 7; i >= 0; i--) {
-                    boolean bit = ((currentByte >> i) & 1) == 1;
-                    currentCode.append(bit ? '1' : '0');
+            // Store all bytes in a buffer first
+            byte[] allBytes = new byte[in.available()];
+            in.readFully(allBytes);
+            
+            // Convert to a single bit string first
+            StringBuilder allBits = new StringBuilder();
+            for (byte b : allBytes) {
+                String bits = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0');
+                allBits.append(bits);
+            }
+            
+            // Now process all bits sequentially without any byte boundaries
+            String bitString = allBits.toString();
+            int bitPos = 0;
+            
+            while (sequencesDecoded < numSequences && bitPos < bitString.length()) {
+                currentCode.append(bitString.charAt(bitPos++));
+                String code = currentCode.toString();
+                
+                if (huffmanCodes.containsKey(code)) {
+                    char decodedChar = huffmanCodes.get(code);
+                    result.append(decodedChar);
                     
-                    // Check if current code matches any Huffman code
-                    if (huffmanCodes.containsKey(currentCode.toString())) {
-                        result.append(huffmanCodes.get(currentCode.toString()));
-                        currentCode.setLength(0);
+                    // Debug first 20 sequences
+                    if (sequencesDecoded < 20) {
+                        System.out.println("Decoded #" + sequencesDecoded + ": " + decodedChar + 
+                                         " from code: " + code);
                     }
+                    
+                    currentCode.setLength(0);
+                    sequencesDecoded++;
+                }
+                
+                // Safety check
+                if (currentCode.length() > 32) {
+                    System.err.println("Warning: Invalid code at bit position " + bitPos);
+                    currentCode.setLength(0);
                 }
             }
+            
+            System.out.println("Total sequences decoded: " + sequencesDecoded);
         }
         return result.toString();
     }
 
     private static String applySubstitutions(String text, 
                                            Map<Character, String> substitutions) {
-        StringBuilder result = new StringBuilder(text);
-        
         // Sort substitutions by length (longest first) to handle overlapping patterns
         List<Map.Entry<Character, String>> sortedSubs = new ArrayList<>(substitutions.entrySet());
         sortedSubs.sort((a, b) -> b.getValue().length() - a.getValue().length());
         
-        // Apply each substitution
-        for (Map.Entry<Character, String> entry : sortedSubs) {
-            int index = 0;
-            while ((index = result.indexOf(String.valueOf(entry.getKey()), index)) != -1) {
-                result.replace(index, index + 1, entry.getValue());
-                index += entry.getValue().length();
+        // Process text in chunks to avoid memory issues
+        int chunkSize = 1048576; // 1MB chunks
+        StringBuilder finalResult = new StringBuilder();
+        
+        for (int start = 0; start < text.length(); start += chunkSize) {
+            int end = Math.min(start + chunkSize, text.length());
+            StringBuilder chunk = new StringBuilder(text.substring(start, end));
+            
+            // Apply substitutions to this chunk
+            for (Map.Entry<Character, String> entry : sortedSubs) {
+                char key = entry.getKey();
+                String value = entry.getValue();
+                
+                int index = 0;
+                while ((index = chunk.indexOf(String.valueOf(key), index)) != -1) {
+                    chunk.replace(index, index + 1, value);
+                    index += value.length();
+                }
+            }
+            
+            finalResult.append(chunk);
+            
+            // Print progress
+            if (start % (chunkSize * 10) == 0) {
+                System.out.printf("Processed %.2f%% of the text%n", 
+                                (start * 100.0) / text.length());
             }
         }
         
-        return result.toString();
+        return finalResult.toString();
     }
 
     private static void writeOutput(String filePath, String content) throws IOException {
