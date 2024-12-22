@@ -71,52 +71,54 @@ public class Decompression {
                                          Map<String, Character> huffmanCodes) throws IOException {
         StringBuilder result = new StringBuilder();
         StringBuilder currentCode = new StringBuilder();
-        
+        StringBuilder excessBits = new StringBuilder(); // To store leftover bits
+        int chunkSize = 32 * 1024 * 1024; // 32 MB chunks
+
         try (DataInputStream in = new DataInputStream(new FileInputStream(filePath))) {
             int numSequences = in.readInt();
             int sequencesDecoded = 0;
-            
-            // Store all bytes in a buffer first
-            byte[] allBytes = new byte[in.available()];
-            in.readFully(allBytes);
-            
-            // Convert to a single bit string first
-            StringBuilder allBits = new StringBuilder();
-            for (byte b : allBytes) {
-                String bits = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0');
-                allBits.append(bits);
-            }
-            
-            // Now process all bits sequentially without any byte boundaries
-            String bitString = allBits.toString();
-            int bitPos = 0;
-            
-            while (sequencesDecoded < numSequences && bitPos < bitString.length()) {
-                currentCode.append(bitString.charAt(bitPos++));
-                String code = currentCode.toString();
+
+            while (sequencesDecoded < numSequences) {
+                byte[] allBytes = new byte[Math.min(chunkSize, in.available())];
+                in.readFully(allBytes);
                 
-                if (huffmanCodes.containsKey(code)) {
-                    char decodedChar = huffmanCodes.get(code);
-                    result.append(decodedChar);
-                    
-                    // Debug first 20 sequences
-                    if (sequencesDecoded < 20) {
-                        System.out.println("Decoded #" + sequencesDecoded + ": " + decodedChar + 
-                                         " from code: " + code);
+                // Convert to a single bit string
+                StringBuilder allBits = new StringBuilder(excessBits.toString());
+                for (byte b : allBytes) {
+                    String bits = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(' ', '0');
+                    allBits.append(bits);
+                }
+
+                // Process bits sequentially
+                String bitString = allBits.toString();
+                int bitPos = 0;
+
+                while (sequencesDecoded < numSequences && bitPos < bitString.length()) {
+                    currentCode.append(bitString.charAt(bitPos++));
+                    String code = currentCode.toString();
+
+                    if (huffmanCodes.containsKey(code)) {
+                        char decodedChar = huffmanCodes.get(code);
+                        result.append(decodedChar);
+                        currentCode.setLength(0);
+                        sequencesDecoded++;
                     }
-                    
-                    currentCode.setLength(0);
-                    sequencesDecoded++;
+
+                    // Safety check for current code length
+                    if (currentCode.length() > 32) {
+                        System.err.println("Warning: Invalid code at bit position " + bitPos);
+                        currentCode.setLength(0);
+                    }
                 }
-                
-                // Safety check
-                if (currentCode.length() > 32) {
-                    System.err.println("Warning: Invalid code at bit position " + bitPos);
-                    currentCode.setLength(0);
+
+                // Store any remaining bits for the next chunk
+                if (bitPos < bitString.length()) {
+                    excessBits.setLength(0); // Clear excessBits
+                    excessBits.append(bitString.substring(bitPos));
                 }
             }
-            
-            System.out.println("Total sequences decoded: " + sequencesDecoded);
+
+            // System.out.println("Total sequences decoded: " + sequencesDecoded);
         }
         return result.toString();
     }
@@ -149,11 +151,11 @@ public class Decompression {
             
             finalResult.append(chunk);
             
-            // Print progress
-            if (start % (chunkSize * 10) == 0) {
-                System.out.printf("Processed %.2f%% of the text%n", 
-                                (start * 100.0) / text.length());
-            }
+            // // Print progress
+            // if (start % (chunkSize * 10) == 0) {
+            //     System.out.printf("Processed %.2f%% of the text%n", 
+            //                     (start * 100.0) / text.length());
+            // }
         }
         
         return finalResult.toString();
