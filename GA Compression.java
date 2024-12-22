@@ -28,23 +28,17 @@ public class GACompression {
 
     public static void main(String[] args) {
         // Define file path to read sequences
-
-        int longestPattern = 5;
-        int comb = 1;
+        String combination = "single_single"; // this is used for multiple variants of GA. First parameter (before_) is for crossover and second (after_) for mutation. E.g., use "single_single" for single point crossover and single point mutation.
         Map<String, Character> sequenceToCodeMap = new HashMap<>();
         String DS = "sample";// enter dataset name here
         List<String> chromosomeFiles = null;
         String folderPath = null;
         List<String> dnaSequences = new ArrayList<>();
-        folderPath = "Data/;
+        folderPath = "Data"; //path to folder
         chromosomeFiles = Arrays.asList(DS);
 
         int maxEntryLength = 1;
         boolean probBasedOccurances = true;
-        // Read each chromosome file and combine lines into a single sequence (ignoring
-        // the first line)
-        // Read each chromosome file and combine lines into a single sequence (ignoring
-        // the first line)
         for (String fileName : chromosomeFiles) {
             String filePath = folderPath + "/" + fileName;
 
@@ -67,31 +61,21 @@ public class GACompression {
                             }
                             continue; // Skip the header line
                         }
-
-                        // Append the sequence lines (ignoring any headers)
                         chromosomeSequence.append(line);
                     }
 
-                    // Add the last sequence after the loop
                     if (chromosomeSequence.length() > 0) {
                         dnaSequences.add(chromosomeSequence.toString());
                     }
                 } else {
-                    // Use the original processing for non-FASTA files
                     StringBuilder chromosomeSequence = new StringBuilder();
                     for (int i = 0; i < lines.size(); i++) {
                         String line = lines.get(i).trim();
-
-                        // Ignore the first line if it starts with '>'
                         if (i == 0 && line.startsWith(">")) {
                             continue;
                         }
-
-                        // Combine the remaining lines into one sequence
                         chromosomeSequence.append(line);
                     }
-
-                    // Add the sequence to the list
                     if (chromosomeSequence.length() > 0) {
                         dnaSequences.add(chromosomeSequence.toString());
                     }
@@ -113,411 +97,342 @@ public class GACompression {
             totalBits += sequenceLength * bitsPerBase;
         }
 
-        // Calculate BPB for original data
-        double bpbB = (double) totalBits / totalBases;
-        System.out.println("Total bases of original data: " + totalBases);
-        System.out.println("Total bits of original data: " + totalBits);
-
-        // Take inputs for the number of generations and the number of top subsequences
-        // (m)
-        //        Scanner scanner = new Scanner(System.in);
-        //        System.out.print("Enter the number of generations (n): ");
-        //        int generations = scanner.nextInt();
         int generations = 10;
         Scanner scanner = new Scanner(System.in);
         System.out.print("Enter the number of top subsequences (m): ");
         int topSubsequences = scanner.nextInt();
         long startTime = System.currentTimeMillis(); // Get the start time
         // Set to store the unique best sequences (Ensuring no duplicates)
-        System.out.println("Started");
         String COV = null;
         String MV = null;
 
-        for (int combination = comb; combination <= comb; combination++) {
-            int codeIndex = 0;
-            // List<String> dnaSequencesDummy = dnaSequences;
-            Set<String> bestSequences = new HashSet<>();
-            List<Integer> bestOccurrences = new ArrayList<>(); // To store corresponding occurrences
+        Set<String> bestSequences = new HashSet<>();
+        List<Integer> bestOccurrences = new ArrayList<>(); // To store corresponding occurrences
 
-            String dna1 = null;
-            String dna2 = null;
+        String dna1 = null;
+        String dna2 = null;
 
-            switch (combination) {
-                case 1:
-                    COV = "single";
-                    MV = "single";
+        switch (combination) {
+            case "single_single":
+                COV = "single";
+                MV = "single";
+                break;
+            case "single_scramble":
+                COV = "single";
+                MV = "scramble";
+                break;
+            case "cycle_scramble":
+                COV = "cycle";
+                MV = "scramble";
+                break;
+            case "cycle_single":
+                COV = "cycle";
+                MV = "single";
+                break;
+
+            default:
+                System.out.println("Invalid combination.");
+                System.exit(0); // Exit the program
+        }
+        int pss = 0;
+        int consecutiveFailures = 0;
+        while (bestSequences.size() < topSubsequences) {
+        
+            pss = bestSequences.size();
+
+            String bestSequence = "";
+            int maxOverallOccurrences = 0;
+            String bestDnaString = ""; // To hold the actual DNA sequence with the most occurrences
+
+            dna1 = generateRandomDNA();
+
+            // Generate dna2 and check if it's the same as dna1
+            do {
+                dna2 = generateRandomDNA();
+            } while (dna2.equals(dna1));
+
+            String[] crossoverResult = null;
+            String mutatedDna1 = null;
+            String mutatedDna2 = null;
+            // Store occurrences for each sequence along with the actual sequence
+            Map<String, Integer> sequenceOccurrences = new HashMap<>();
+            Map<String, String> sequenceStrings = new HashMap<>();
+            sequenceOccurrences.put(dna1, countOccurrences(dnaSequences, dna1));
+
+            sequenceStrings.put("DNA1", dna1);
+
+            sequenceOccurrences.put(dna2, countOccurrences(dnaSequences, dna2));
+            sequenceStrings.put("DNA2", dna2);
+            // Loop for each generation (n generations)
+            for (int gen = 1; gen <= generations; gen++) {
+                if (COV.equals("single")) {
+                    crossoverResult = applySinglePointCrossover(dna1, dna2);
+
+                } else if (COV.equals("cycle")) {
+                    crossoverResult = applyCycleCrossover(dna1, dna2);
+                }
+                if (crossoverResult[0].length() == 0 || crossoverResult[1].length() == 0) {
                     break;
-                case 4:
-                    COV = "cycle";
-                    MV = "scramble";
-                    break;
-                case 3:
-                    COV = "cycle";
-                    MV = "single";
-                    break;
-                case 2:
-                    COV = "single";
-                    MV = "scramble";
-                    break;
+                }
+                if (MV.equals("single")) {
+                    mutatedDna1 = applySinglePointMutation(dna1);
 
-                default:
-                    System.out.println("Invalid combination.");
-                    continue;
-            }
-            int pss = 0;
-            // Loop to run the GA code m times, ensuring we collect unique sequences
-            // Add a counter for consecutive failures
-            int consecutiveFailures = 0;
-            while (bestSequences.size() < topSubsequences) {
-                System.out.println("Pat: " + (bestSequences.size() + 1));
+                    // Generate dna2 and check if it's the same as dna1
+                    do {
+                        mutatedDna2 = applySinglePointMutation(dna2);
+                    } while (mutatedDna2.equals(mutatedDna1));
+                } else if (MV.equals("scramble")) {
+                    mutatedDna1 = applyScrambleMutation(dna1);
+                    mutatedDna2 = applyScrambleMutation(dna2);
 
-                pss = bestSequences.size();
-
-                String bestSequence = "";
-                int maxOverallOccurrences = 0;
-                String bestDnaString = ""; // To hold the actual DNA sequence with the most occurrences
-
-                dna1 = generateRandomDNA();
-
-                // Generate dna2 and check if it's the same as dna1
-                do {
-                    dna2 = generateRandomDNA();
-                } while (dna2.equals(dna1));
-
-                String[] crossoverResult = null;
-                String mutatedDna1 = null;
-                String mutatedDna2 = null;
-                // Store occurrences for each sequence along with the actual sequence
-                Map<String, Integer> sequenceOccurrences = new HashMap<>();
-                Map<String, String> sequenceStrings = new HashMap<>();
-                sequenceOccurrences.put(dna1, countOccurrences(dnaSequences, dna1));
-
-                sequenceStrings.put("DNA1", dna1);
-
-                sequenceOccurrences.put(dna2, countOccurrences(dnaSequences, dna2));
-                sequenceStrings.put("DNA2", dna2);
-                // Loop for each generation (n generations)
-                for (int gen = 1; gen <= generations; gen++) {
-                    // System.out.println("Pat: " + (bestSequences.size()+1) + "\nGeneration " + gen
-                    // + ":");
-                    if (COV.equals("single")) {
-                        // if (COV.equals("single") && MV.equals("single")) {
-
-                        crossoverResult = applySinglePointCrossover(dna1, dna2);
-
-                    } else if (COV.equals("cycle")) {
-                        crossoverResult = applyCycleCrossover(dna1, dna2);
-                        // System.out.println("Cycle crossover applied");
-                    }
-                    if (crossoverResult[0].length() == 0 || crossoverResult[1].length() == 0) {
-                        break;
-                    }
-                    if (MV.equals("single")) {
-                        mutatedDna1 = applySinglePointMutation(dna1);
-
-                        // Generate dna2 and check if it's the same as dna1
-                        do {
-                            mutatedDna2 = applySinglePointMutation(dna2);
-                        } while (mutatedDna2.equals(mutatedDna1));
-                    } else if (MV.equals("scramble")) {
-                        // System.out.println("Scramble mutation applied");
-                        mutatedDna1 = applyScrambleMutation(dna1);
-                        mutatedDna2 = applyScrambleMutation(dna2);
-
-                    }
-                    if (probBasedOccurances) {
-                        // 50-50 chance to run either the first two lines or the last two lines
-                        if (Math.random() < 0.5) {
-                            // Run the first two lines
-                            sequenceOccurrences.put(mutatedDna1, countOccurrences(dnaSequences, mutatedDna1));
-                            sequenceStrings.put("Mutated DNA1", mutatedDna1);
-                        } else {
-                            // Run the last two lines
-                            sequenceOccurrences.put(mutatedDna2, countOccurrences(dnaSequences, mutatedDna2));
-                            sequenceStrings.put("Mutated DNA2", mutatedDna2);
-                        }
-                    } else {
-                        // If probBasedOccurrences is false, run all four lines
+                }
+                if (probBasedOccurances) {
+                    // 50-50 chance to run either the first two lines or the last two lines
+                    if (Math.random() < 0.5) {
+                        // Run the first two lines
                         sequenceOccurrences.put(mutatedDna1, countOccurrences(dnaSequences, mutatedDna1));
                         sequenceStrings.put("Mutated DNA1", mutatedDna1);
-
+                    } else {
+                        // Run the last two lines
                         sequenceOccurrences.put(mutatedDna2, countOccurrences(dnaSequences, mutatedDna2));
                         sequenceStrings.put("Mutated DNA2", mutatedDna2);
                     }
-                    // Find the best sequence for this generation
-                    String bestSequenceInGeneration = "";
-                    String bestDnaInGeneration = "";
-                    int maxOccurrencesInGeneration = 0;
-                    // System.out.println("Here2.5");
-                    for (Map.Entry<String, Integer> entry : sequenceOccurrences.entrySet()) {
-                        if (entry.getValue() > maxOccurrencesInGeneration) {
-                            maxOccurrencesInGeneration = entry.getValue();
-                            bestSequenceInGeneration = entry.getKey();
-                            bestDnaInGeneration = entry.getKey();
-                        }
-                    }
-                    // Track the overall best sequence across generations
-                    if (maxOccurrencesInGeneration > maxOverallOccurrences) {
-                        maxOverallOccurrences = maxOccurrencesInGeneration;
-                        bestSequence = bestSequenceInGeneration;
-                        bestDnaString = bestDnaInGeneration;
-                    }
-                    String firstString = null;
-                    String secondString = null;
-                    int firstCount = -1;
-                    int secondCount = -1;
-
-                    // Iterate through the map to find the top two occurrences
-                    for (Map.Entry<String, Integer> entry : sequenceOccurrences.entrySet()) {
-                        String currentString = entry.getKey();
-                        int currentCount = entry.getValue();
-                        if (currentCount > firstCount) {
-                            // Update second place before first
-                            secondString = firstString;
-                            secondCount = firstCount;
-
-                            // Update first place
-                            firstString = currentString;
-                            firstCount = currentCount;
-                        } else if (currentCount >= secondCount) {
-                            // Update second place only
-                            secondString = currentString;
-                            secondCount = currentCount;
-                        }
-                    }
-                    dna1 = firstString;
-                    dna2 = secondString;
-                }
-                System.out.println("Best DNA: " + bestDnaString);
-                System.out.println("Max Occurrences: " + maxOverallOccurrences);
-
-                // Assign characters other than A, C, T, G for the best sequences
-                // Create a StringBuilder to hold characters
-                StringBuilder codeBuilder = new StringBuilder();
-
-                // Iterate through all printable ASCII characters
-                for (char c = 32; c < 127; c++) { // From ASCII 32 to 126
-                    // Append characters except for A, C, T, and G
-                    if (c != 'A' && c != 'C' && c != 'T' && c != 'G') {
-                        codeBuilder.append(c);
-                    }
-                }
-                // Convert the StringBuilder to a char array
-                char[] codes = codeBuilder.toString().toCharArray();
-
-                // Ensure the best sequence is unique and does not overlap with already stored
-                // sequences
-                if (maxOverallOccurrences != 0) {// && bestDnaString.length() > maxEntryLength) {
-                    bestSequences.add(bestDnaString);
-                    bestOccurrences.add(maxOverallOccurrences);
-
-                    // Assign a unique code character for this bestDnaString
-                    sequenceToCodeMap.putIfAbsent(bestDnaString, codes[bestSequences.size()]);
-                    codeIndex++; // Increment to assign next character for next sequence
-
-                    // Replace this bestDnaString in dnaSequencesDummy with its code character
-                    for (int i = 0; i < dnaSequences.size(); i++) {
-                        String sequence = dnaSequences.get(i);
-                        // Replace all occurrences of bestDnaString with its code character
-                        dnaSequences.set(i, sequence.replace(bestDnaString,
-                                String.valueOf(sequenceToCodeMap.get(bestDnaString))));
-                    }
-
-                }
-                if (pss == bestSequences.size()) {
-                    consecutiveFailures++;
-                    // Only stop if we fail to find new patterns for several consecutive attempts
-                    if (consecutiveFailures >= 5) { // You can adjust this threshold
-                        System.out.println("No more patterns found after " + consecutiveFailures +
-                                " attempts, stopping at count: " + bestSequences.size());
-                        break;
-                    }
                 } else {
-                    consecutiveFailures = 0; // Reset counter when we find a pattern
+                    // If probBasedOccurrences is false, run all four lines
+                    sequenceOccurrences.put(mutatedDna1, countOccurrences(dnaSequences, mutatedDna1));
+                    sequenceStrings.put("Mutated DNA1", mutatedDna1);
+
+                    sequenceOccurrences.put(mutatedDna2, countOccurrences(dnaSequences, mutatedDna2));
+                    sequenceStrings.put("Mutated DNA2", mutatedDna2);
+                }
+                // Find the best sequence for this generation
+                String bestSequenceInGeneration = "";
+                String bestDnaInGeneration = "";
+                int maxOccurrencesInGeneration = 0;
+                for (Map.Entry<String, Integer> entry : sequenceOccurrences.entrySet()) {
+                    if (entry.getValue() > maxOccurrencesInGeneration) {
+                        maxOccurrencesInGeneration = entry.getValue();
+                        bestSequenceInGeneration = entry.getKey();
+                        bestDnaInGeneration = entry.getKey();
+                    }
+                }
+                // Track the overall best sequence across generations
+                if (maxOccurrencesInGeneration > maxOverallOccurrences) {
+                    maxOverallOccurrences = maxOccurrencesInGeneration;
+                    bestSequence = bestSequenceInGeneration;
+                    bestDnaString = bestDnaInGeneration;
+                }
+                String firstString = null;
+                String secondString = null;
+                int firstCount = -1;
+                int secondCount = -1;
+
+                for (Map.Entry<String, Integer> entry : sequenceOccurrences.entrySet()) {
+                    String currentString = entry.getKey();
+                    int currentCount = entry.getValue();
+                    if (currentCount > firstCount) {
+                        // Update second place before first
+                        secondString = firstString;
+                        secondCount = firstCount;
+
+                        // Update first place
+                        firstString = currentString;
+                        firstCount = currentCount;
+                    } else if (currentCount >= secondCount) {
+                        // Update second place only
+                        secondString = currentString;
+                        secondCount = currentCount;
+                    }
+                }
+                dna1 = firstString;
+                dna2 = secondString;
+            }
+         
+            // Assign characters other than A, C, T, G for the best sequences
+            // Create a StringBuilder to hold characters
+            StringBuilder codeBuilder = new StringBuilder();
+
+            // Iterate through all printable ASCII characters
+            for (char c = 32; c < 127; c++) { // From ASCII 32 to 126
+                // Append characters except for A, C, T, and G
+                if (c != 'A' && c != 'C' && c != 'T' && c != 'G') {
+                    codeBuilder.append(c);
                 }
             }
-            // System.out.println("HereHere");
-            // System.out.println(bestSequences);
-            // System.out.println(bestOccurrences);
+            // Convert the StringBuilder to a char array
+            char[] codes = codeBuilder.toString().toCharArray();
 
-            if (true) {
-                System.out.println("Result of Crossover: Single, and Mutation : Single");
+            // Ensure the best sequence is unique and does not overlap with already stored
+            // sequences
+            if (maxOverallOccurrences != 0) {// && bestDnaString.length() > maxEntryLength) {
+                bestSequences.add(bestDnaString);
+                bestOccurrences.add(maxOverallOccurrences);
 
-                // Print the final result - top m sequences
-                System.out.println("\n=== Final Best Sequences ===");
-
-                // Modified pattern selection with dynamic length prioritization
-                List<PatternInfo> sortedPatterns = new ArrayList<>();
-                int i = 0;
-                for (String pattern : bestSequences) {
-                    int frequency = bestOccurrences.get(i);
-                    int totalFreq = frequency;
-
-                    if (pattern.length() >= 2 && totalFreq >= 2) {
-                        // Calculate original size (2 bits per base)
-                        int originalBits = pattern.length() * 2 * totalFreq;
-
-                        // Calculate Huffman-encoded size
-                        int huffmanBits = estimateHuffmanSize(pattern, totalFreq);
-
-                        // Calculate dictionary overhead (pattern storage + Huffman table entry)
-                        int dictionaryOverhead = (pattern.length() * 2) + 8 +
-                                (int) Math.ceil(Math.log(totalFreq) / Math.log(2));
-
-                        // Total compression cost
-                        int compressedSize = huffmanBits + dictionaryOverhead;
-                        int compressionBenefit = originalBits - compressedSize;
-
-                        // Combined score considering length, frequency and Huffman efficiency
-                        double lengthScore = pattern.length() * 2;
-                        double frequencyScore = Math.log(totalFreq) / Math.log(2);
-                        double huffmanScore = originalBits / (double) compressedSize; // compression ratio
-                        double combinedScore = lengthScore * frequencyScore * huffmanScore;
-
-                        // More stringent selection criteria
-                        if (combinedScore >= 1 && compressionBenefit > dictionaryOverhead) {
-                            sortedPatterns.add(new PatternInfo(
-                                    pattern,
-                                    frequency,
-                                    compressionBenefit,
-                                    combinedScore,
-                                    huffmanBits));
-                        }
-                    }
-                    i++;
-                }
-                // System.out.println("Here");
-                // Sort patterns considering Huffman efficiency
-                Collections.sort(sortedPatterns, (a, b) -> {
-                    // First compare combined scores
-                    int scoreCompare = Double.compare(b.combinedScore, a.combinedScore);
-                    if (scoreCompare != 0)
-                        return scoreCompare;
-
-                    // If scores are equal, compare compression ratios
-                    double ratioA = (double) b.compressionBenefit / b.huffmanBits;
-                    double ratioB = (double) a.compressionBenefit / a.huffmanBits;
-                    return Double.compare(ratioA, ratioB);
-                });
-
-                // Process patterns in phases based on length
-                List<PatternInfo> beneficialPatterns = new ArrayList<>();
-                Set<String> coveredPositions = new HashSet<>();
-
-                // First phase: longer patterns (length >= 6)
-                for (PatternInfo pattern : sortedPatterns) {
-                    if (pattern.pattern.length() >= 6 && pattern.compressionBenefit > 100) {
-                        beneficialPatterns.add(pattern);
-                    }
+                // Assign a unique code character for this bestDnaString
+                sequenceToCodeMap.putIfAbsent(bestDnaString, codes[bestSequences.size()]);
+   
+                // Replace this bestDnaString in dnaSequencesDummy with its code character
+                for (int i = 0; i < dnaSequences.size(); i++) {
+                    String sequence = dnaSequences.get(i);
+                    // Replace all occurrences of bestDnaString with its code character
+                    dnaSequences.set(i, sequence.replace(bestDnaString,
+                            String.valueOf(sequenceToCodeMap.get(bestDnaString))));
                 }
 
-                // Second phase: medium patterns (length 4-5)
-                for (PatternInfo pattern : sortedPatterns) {
-                    if (pattern.pattern.length() >= 4 && pattern.pattern.length() < 6
-                            && pattern.compressionBenefit > 150) {
-                        beneficialPatterns.add(pattern);
-                    }
-                }
-
-                // Third phase: shorter patterns (length < 4)
-                for (PatternInfo pattern : sortedPatterns) {
-                    if (pattern.pattern.length() < 4 && pattern.compressionBenefit > 200) { // Higher threshold for
-                                                                                            // shorter patterns
-                        beneficialPatterns.add(pattern);
-                    }
-                }
-
-                // Limit the total number of patterns if needed
-                int maxPatterns = 50; // Adjust this value based on your needs
-                if (beneficialPatterns.size() > maxPatterns) {
-                    beneficialPatterns = beneficialPatterns.subList(0, maxPatterns);
-                }
-
-                // Generate and store bit codes for each beneficial pattern
-                for (int j = 0; j < beneficialPatterns.size(); j++) {
-                    PatternInfo pattern = beneficialPatterns.get(j);
-                    patternToBitCode.put(pattern.pattern, getBitCode(j));
-                }
-
-                // Now calculate compressed size with only beneficial patterns
-                long originalBases = 0;
-                long compressedBits = 0;
-                int dictionaryBits = 0;
-
-                // Calculate dictionary overhead
-                for (PatternInfo pattern : beneficialPatterns) {
-                    String bitCode = patternToBitCode.get(pattern.pattern);
-                    dictionaryBits += 4 + (pattern.pattern.length() * 2) + 4 + bitCode.length();
-                }
-
-                // Process sequences
-                for (String sequence : dnaSequences) {
-                    originalBases += sequence.length();
-                    String processedSeq = sequence;
-
-                    // Replace patterns in order of benefit
-                    for (PatternInfo pattern : beneficialPatterns) {
-                        String bitCode = patternToBitCode.get(pattern.pattern);
-                        int occurrences = countOccurrences(Arrays.asList(processedSeq), pattern.pattern);
-                        compressedBits += occurrences * bitCode.length();
-                        processedSeq = processedSeq.replace(pattern.pattern, "");
-                    }
-
-                    // Add bits for remaining bases
-                    compressedBits += processedSeq.length() * 2;
-                }
-
-                // Add dictionary overhead
-                long compressedTotalBits = compressedBits + dictionaryBits;
-                double bpb = (double) compressedTotalBits / totalBases;
-
-                // Print results
-                System.out.println("Original bases: " + originalBases);
-                System.out.println("Compressed bits: " + compressedBits);
-                System.out.println("Dictionary bits: " + dictionaryBits);
-                System.out.println("Total bits: " + compressedTotalBits);
-                System.out.println("Bits per base (BPB): " + bpb);
-
-                // Print pattern details
-                for (PatternInfo pattern : beneficialPatterns) {
-                    String bitCode = patternToBitCode.get(pattern.pattern);
-                    System.out.printf("Pattern: %s, Frequency: %d, Benefit: %d, Bit code: %s (length: %d)%n",
-                            pattern.pattern, pattern.frequency, pattern.compressionBenefit,
-                            bitCode, bitCode.length());
-                }
-
-                // Print the transformed sequences after all replacements
-                // System.out.println("\n=== Transformed Database After Replacements ===");
-                // for (String sequence : dnaSequences) {
-                // System.out.println(sequence.substring(0, Math.min(100, sequence.length())) +
-                // (sequence.length() > 100 ? "..." : ""));
-                // }
-                // System.out.println("===================================\n");
-
-                /*
-                 * Comment out detailed code table
-                 * System.out.println("=== Detailed Code Table ===");
-                 * for (Map.Entry<String, Character> entry : sequenceToCodeMap.entrySet()) {
-                 * System.out.printf("Pattern: %s -> Replacement Character: %c%n",
-                 * entry.getKey(), entry.getValue());
-                 * }
-                 * System.out.println("===================================\n");
-                 */
-
-                // Add file size check after compression
-                File compressedFile = new File(folderPath + "/output/" + DS + "_compressed.bin");
-                File dictionaryFile = new File(folderPath + "/output/" + DS + "_compressed.dict");
-                double compressedSizeKB = (compressedFile.length() + dictionaryFile.length()) / 1024.0;
-                // System.out.printf("Compressed files total size: %.2f KB%n",
-                // compressedSizeKB);
-
-                // Continue with rest of the code...
             }
-
-            // After all pattern replacements and before final statistics
-            String outputPath = folderPath + "/output/" + DS + "_compressed";
-            encodeAndSaveToOutput(dnaSequences, sequenceToCodeMap, outputPath);
+            if (pss == bestSequences.size()) {
+                consecutiveFailures++;
+                // Only stop if we fail to find new patterns for several consecutive attempts
+                if (consecutiveFailures >= 5) { // You can adjust this threshold
+                    // System.out.println("No more patterns found after " + consecutiveFailures +
+                            // " attempts, stopping at count: " + bestSequences.size());
+                    break;
+                }
+            } else {
+                consecutiveFailures = 0; // Reset counter when we find a pattern
+            }
         }
+   
+        if (true) {
+
+            // Modified pattern selection with dynamic length prioritization
+            List<PatternInfo> sortedPatterns = new ArrayList<>();
+            int i = 0;
+            for (String pattern : bestSequences) {
+                int frequency = bestOccurrences.get(i);
+                int totalFreq = frequency;
+
+                if (pattern.length() >= 2 && totalFreq >= 2) {
+                    // Calculate original size (2 bits per base)
+                    int originalBits = pattern.length() * 2 * totalFreq;
+
+                    // Calculate Huffman-encoded size
+                    int huffmanBits = estimateHuffmanSize(pattern, totalFreq);
+
+                    // Calculate dictionary overhead (pattern storage + Huffman table entry)
+                    int dictionaryOverhead = (pattern.length() * 2) + 8 +
+                            (int) Math.ceil(Math.log(totalFreq) / Math.log(2));
+
+                    // Total compression cost
+                    int compressedSize = huffmanBits + dictionaryOverhead;
+                    int compressionBenefit = originalBits - compressedSize;
+
+                    // Combined score considering length, frequency and Huffman efficiency
+                    double lengthScore = pattern.length() * 2;
+                    double frequencyScore = Math.log(totalFreq) / Math.log(2);
+                    double huffmanScore = originalBits / (double) compressedSize; // compression ratio
+                    double combinedScore = lengthScore * frequencyScore * huffmanScore;
+
+                    // More stringent selection criteria
+                    if (combinedScore >= 1 && compressionBenefit > dictionaryOverhead) {
+                        sortedPatterns.add(new PatternInfo(
+                                pattern,
+                                frequency,
+                                compressionBenefit,
+                                combinedScore,
+                                huffmanBits));
+                    }
+                }
+                i++;
+            }
+            // Sort patterns considering Huffman efficiency
+            Collections.sort(sortedPatterns, (a, b) -> {
+                // First compare combined scores
+                int scoreCompare = Double.compare(b.combinedScore, a.combinedScore);
+                if (scoreCompare != 0)
+                    return scoreCompare;
+
+                // If scores are equal, compare compression ratios
+                double ratioA = (double) b.compressionBenefit / b.huffmanBits;
+                double ratioB = (double) a.compressionBenefit / a.huffmanBits;
+                return Double.compare(ratioA, ratioB);
+            });
+
+            // Process patterns in phases based on length
+            List<PatternInfo> beneficialPatterns = new ArrayList<>();
+            Set<String> coveredPositions = new HashSet<>();
+
+            // First phase: longer patterns (length >= 6)
+            for (PatternInfo pattern : sortedPatterns) {
+                if (pattern.pattern.length() >= 6 && pattern.compressionBenefit > 100) {
+                    beneficialPatterns.add(pattern);
+                }
+            }
+            for (PatternInfo pattern : sortedPatterns) {
+                if (pattern.pattern.length() >= 4 && pattern.pattern.length() < 6
+                        && pattern.compressionBenefit > 150) {
+                    beneficialPatterns.add(pattern);
+                }
+            }
+            for (PatternInfo pattern : sortedPatterns) {
+                if (pattern.pattern.length() < 4 && pattern.compressionBenefit > 200) { // Higher threshold for
+                                                                                        // shorter patterns
+                    beneficialPatterns.add(pattern);
+                }
+            }
+
+            // Limit the total number of patterns if needed
+            int maxPatterns = 50; // Adjust this value based on your needs
+            if (beneficialPatterns.size() > maxPatterns) {
+                beneficialPatterns = beneficialPatterns.subList(0, maxPatterns);
+            }
+
+            // Generate and store bit codes for each beneficial pattern
+            for (int j = 0; j < beneficialPatterns.size(); j++) {
+                PatternInfo pattern = beneficialPatterns.get(j);
+                patternToBitCode.put(pattern.pattern, getBitCode(j));
+            }
+
+            // Now calculate compressed size with only beneficial patterns
+            long originalBases = 0;
+            long compressedBits = 0;
+            int dictionaryBits = 0;
+
+            // Calculate dictionary overhead
+            for (PatternInfo pattern : beneficialPatterns) {
+                String bitCode = patternToBitCode.get(pattern.pattern);
+                dictionaryBits += 4 + (pattern.pattern.length() * 2) + 4 + bitCode.length();
+            }
+
+            // Process sequences
+            for (String sequence : dnaSequences) {
+                originalBases += sequence.length();
+                String processedSeq = sequence;
+
+                // Replace patterns in order of benefit
+                for (PatternInfo pattern : beneficialPatterns) {
+                    String bitCode = patternToBitCode.get(pattern.pattern);
+                    int occurrences = countOccurrences(Arrays.asList(processedSeq), pattern.pattern);
+                    compressedBits += occurrences * bitCode.length();
+                    processedSeq = processedSeq.replace(pattern.pattern, "");
+                }
+
+                // Add bits for remaining bases
+                compressedBits += processedSeq.length() * 2;
+            }
+
+            // Add dictionary overhead
+            long compressedTotalBits = compressedBits + dictionaryBits;
+            double bpb = (double) compressedTotalBits / totalBases;
+
+            // Print results
+            // System.out.println("Original bases: " + originalBases);
+            // System.out.println("Compressed bits: " + compressedBits);
+            // System.out.println("Dictionary bits: " + dictionaryBits);
+            // System.out.println("Total bits: " + compressedTotalBits);
+            System.out.println("Bits per base (BPB): " + bpb);
+
+       
+            // Add file size check after compression
+            File compressedFile = new File(folderPath + "/output/" + DS + "_compressed.bin");
+            File dictionaryFile = new File(folderPath + "/output/" + DS + "_compressed.dict");
+
+        }
+
+        // After all pattern replacements and before final statistics
+        String outputPath = folderPath + "/output/" + DS + "_compressed";
+        encodeAndSaveToOutput(dnaSequences, sequenceToCodeMap, outputPath);
+
         long endTime = System.currentTimeMillis(); // Get the start time
         double executionTimeInSeconds = (endTime - startTime) / 1000.0;
         System.out.println("Execution time: " + executionTimeInSeconds + " seconds");
@@ -563,9 +478,6 @@ public class GACompression {
         return code.toString();
     }
 
-    // The rest of the methods like countOccurrences, generateRandomDNA,
-    // applySinglePointCrossover, applySinglePointMutation remain the same as
-    // before...
     public static int countOccurrences(List<String> sequences, String target) {
         int totalOccurrences = 0;
 
@@ -589,32 +501,19 @@ public class GACompression {
 
     // Function to generate random DNA sequence of length between 2 and 6
     public static String generateRandomDNA() {
-        double probabilityOfSize1 = 0.0000000010;
         Random rand = new Random();
         char[] nucleotides = { 'A', 'C', 'T', 'G' };
 
-        // Check if the probability is valid (between 0 and 1)
-        if (probabilityOfSize1 < 0 || probabilityOfSize1 > 1) {
-            throw new IllegalArgumentException("Probability must be between 0 and 1");
-        }
 
         // Generate length: size 1 with given probability, or size 2-6 otherwise
-        int length;
-        if (rand.nextDouble() < probabilityOfSize1) {
-            length = 1; // Probability dictates we create a sequence of size 1
-        } else {
-            length = rand.nextInt(4) + 2; // Random size between 2 and 6
-        }
+        int length = rand.nextInt(6) + 2; // Random size between 2 and 6
 
         // Generate the DNA sequence
         StringBuilder dna = new StringBuilder();
         for (int i = 0; i < length; i++) {
             dna.append(nucleotides[rand.nextInt(4)]); // Randomly select a nucleotide
         }
-
-        // System.out.println("Generated DNA sequence: " + dna.toString());
-        // System.out.println(dna.toString());
-        return dna.toString();
+         return dna.toString();
     }
 
     // Function to apply single-point mutation
@@ -625,10 +524,8 @@ public class GACompression {
         Random rand = new Random();
         char[] nucleotides = { 'A', 'C', 'T', 'G' };
 
-        // System.out.println(dna.length());
         // Select a random position to mutate
         int mutationPosition = rand.nextInt(dna.length());
-        // System.out.println(mutationPosition);
         // Find a new nucleotide different from the current one at the mutation position
         char currentBase = dna.charAt(mutationPosition);
         char newBase;
@@ -659,17 +556,10 @@ public class GACompression {
 
         // Select a random crossover point
         int crossoverPoint = rand.nextInt(minLength);
-
-        // System.out.println("CP: " + crossoverPoint);
-        // System.out.println(dna1);
-        // System.out.println(dna2);
         // Create offspring by combining the DNA from both parents at the crossover
         // point
         String offspring1 = dna1.substring(0, crossoverPoint) + dna2.substring(crossoverPoint);
         String offspring2 = dna2.substring(0, crossoverPoint) + dna1.substring(crossoverPoint);
-
-        // System.out.println(offspring1);
-        // System.out.println(offspring2);
         // Return the two offspring
         return new String[] { offspring1, offspring2 };
     }
@@ -702,10 +592,6 @@ public class GACompression {
 
             // Calculate the bit length based on Shannon entropy (-log2(p))
             double bitLength = -Math.log(probability) / Math.log(2);
-            // System.out.println("Bit length of " + bestOccurrences.get(i) + " is :" +
-            // bitLength);
-            // Total encoded size is the number of bits assigned to this subsequence times
-            // its occurrences
             totalEncodedSize += occurrences * bitLength;
         }
         return totalEncodedSize;
@@ -772,8 +658,8 @@ public class GACompression {
         try {
             // 1. Create frequency map
             Map<Character, Integer> freqMap = new HashMap<>();
-            int totalSequences = 0;  // Track total sequences to encode
-            
+            int totalSequences = 0; // Track total sequences to encode
+
             // First pass: count frequencies and total sequences
             for (String seq : dnaSequences) {
                 for (char c : seq.toCharArray()) {
@@ -786,9 +672,7 @@ public class GACompression {
             HuffmanTree huffman = new HuffmanTree(freqMap);
             Map<Character, String> huffmanCodes = huffman.getCodes();
 
-            boolean isPrefixFree = areCodesPrefixFree(huffmanCodes);
-            System.out.println("Are codes prefix-free? " + isPrefixFree);
-
+        
             // 3. Save dictionary with clear format
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"))) {
                 writer.write("=== SUBSTITUTION TABLE ===\n");
@@ -805,7 +689,7 @@ public class GACompression {
             try (DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
                 // Write total number of sequences at the start
                 out.writeInt(totalSequences);
-                
+
                 StringBuilder bitStream = new StringBuilder();
                 int bitsWritten = 0;
 
@@ -816,12 +700,33 @@ public class GACompression {
                         if (code != null) {
                             bitStream.append(code);
                             bitsWritten += code.length();
-                            
-                            // Write in chunks when buffer is large enough
+                            StringBuilder excessBits = new StringBuilder();
+
                             if (bitStream.length() >= 8192) {
-                                writeBitsExact(out, bitStream, false);
+                                // Store the excess bits
+                                int excessLength = bitStream.length() - 8192;
+                                if (excessLength > 0) {
+                                    // Append the excess bits to the temporary variable
+                                    excessBits.append(bitStream.substring(8192));
+                                }
+
+                                // Write the first 8192 bits to the output
+                                writeBitsExact(out, new StringBuilder(bitStream.substring(0, 8192)), false);
+
+                                // Clear the bitStream for the next iteration
                                 bitStream.setLength(0);
                             }
+
+                            // At the start of the next iteration, prepend the excess bits
+                            if (excessBits.length() > 0) {
+                                bitStream.insert(0, excessBits);
+                                excessBits.setLength(0); // Clear the excessBits after prepending
+                            }
+                            // Write in chunks when buffer is large enough
+                            // if (bitStream.length() >= 8192) {
+                            // writeBitsExact(out, bitStream, false);
+                            // bitStream.setLength(0);
+                            // }
                         }
                     }
                 }
@@ -851,7 +756,8 @@ public class GACompression {
         }
     }
 
-    private static void writeBitsExact(DataOutputStream out, StringBuilder bitStream, boolean isLast) throws IOException {
+    private static void writeBitsExact(DataOutputStream out, StringBuilder bitStream, boolean isLast)
+            throws IOException {
         int remainingBits = bitStream.length();
         int currentByte = 0;
         int bitsInCurrentByte = 0;
@@ -869,29 +775,10 @@ public class GACompression {
 
         // Handle last byte with explicit padding if needed
         if (isLast && bitsInCurrentByte > 0) {
-            currentByte <<= (8 - bitsInCurrentByte);  // Left-align remaining bits
+            currentByte <<= (8 - bitsInCurrentByte); // Left-align remaining bits
             out.write(currentByte);
         }
     }
-
-    private static boolean areCodesPrefixFree(Map<Character, String> codes) {
-        // Convert codes to a list of strings
-        List<String> codeList = new ArrayList<>(codes.values());
-
-        // Sort the list to make comparison easier
-        codeList.sort((a, b) -> a.length() - b.length());
-
-        // Check if any code is a prefix of another
-        for (int i = 0; i < codeList.size(); i++) {
-            for (int j = i + 1; j < codeList.size(); j++) {
-                if (codeList.get(j).startsWith(codeList.get(i))) {
-                    return false; // Found a prefix conflict
-                }
-            }
-        }
-        return true; // No conflicts found
-    }
-
     // Helper class for Huffman coding
     private static class HuffmanTree {
         private class Node implements Comparable<Node> {
@@ -916,7 +803,7 @@ public class GACompression {
         public HuffmanTree(Map<Character, Integer> freqMap) {
             PriorityQueue<Node> pq = new PriorityQueue<>();
             freqMap.forEach((ch, freq) -> pq.offer(new Node(ch, freq)));
-            
+
             while (pq.size() > 1) {
                 Node left = pq.poll();
                 Node right = pq.poll();
@@ -926,13 +813,14 @@ public class GACompression {
                 pq.offer(parent);
             }
             root = pq.poll();
-            
+
             codes = new HashMap<>();
             generateCodes(root, "");
         }
 
         private void generateCodes(Node node, String code) {
-            if (node == null) return;
+            if (node == null)
+                return;
             if (node.left == null && node.right == null) {
                 codes.put(node.ch, code);
                 return;
@@ -951,29 +839,6 @@ public class GACompression {
         double probability = frequency / (double) totalBases;
         int bitsNeeded = (int) Math.ceil(-Math.log(probability) / Math.log(2));
         return bitsNeeded * frequency;
-    }
-
-    // Add this helper method to get reverse complement of a DNA sequence
-    private static String getReverseComplement(String sequence) {
-        StringBuilder reverseComp = new StringBuilder();
-        for (int i = sequence.length() - 1; i >= 0; i--) {
-            char base = sequence.charAt(i);
-            switch (base) {
-                case 'A':
-                    reverseComp.append('T');
-                    break;
-                case 'T':
-                    reverseComp.append('A');
-                    break;
-                case 'C':
-                    reverseComp.append('G');
-                    break;
-                case 'G':
-                    reverseComp.append('C');
-                    break;
-            }
-        }
-        return reverseComp.toString();
     }
 
     // Add this new function for cycle crossover
@@ -1055,57 +920,6 @@ public class GACompression {
         }
 
         return new String(dnaArray);
-    }
-
-    private static void writeCompressedData(String outputPath, 
-                                          List<String> sequences, 
-                                          Map<Character, String> huffmanCodes,
-                                          Map<String, Character> substitutionCodes) throws IOException {
-        try (DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
-            StringBuilder bitStream = new StringBuilder();
-            
-            // Write total number of sequences
-            out.writeInt(sequences.size());
-            
-            // Process each sequence
-            for (String seq : sequences) {
-                // First apply substitution
-                for (Map.Entry<String, Character> entry : substitutionCodes.entrySet()) {
-                    seq = seq.replace(entry.getKey(), String.valueOf(entry.getValue()));
-                }
-                
-                // Then apply Huffman encoding
-                for (char c : seq.toCharArray()) {
-                    String code = huffmanCodes.get(c);
-                    if (code != null) {
-                        bitStream.append(code);
-                    }
-                }
-                
-                // Write bits in chunks
-                while (bitStream.length() >= 8) {
-                    byte b = 0;
-                    for (int i = 0; i < 8; i++) {
-                        if (bitStream.charAt(i) == '1') {
-                            b |= (1 << (7 - i));
-                        }
-                    }
-                    out.write(b);
-                    bitStream.delete(0, 8);
-                }
-            }
-            
-            // Handle remaining bits with padding
-            if (bitStream.length() > 0) {
-                byte b = 0;
-                for (int i = 0; i < bitStream.length(); i++) {
-                    if (bitStream.charAt(i) == '1') {
-                        b |= (1 << (7 - i));
-                    }
-                }
-                out.write(b);
-            }
-        }
     }
 
 }
