@@ -705,14 +705,18 @@ public class SACompression {
         throw new RuntimeException("No more available symbols");
     }
 
-    private static void encodeAndSaveToOutput(List<String> dnaSequencesDummy,
+    private static void encodeAndSaveToOutput(List<String> dnaSequences,
             Map<String, Character> sequenceToCodeMap, String outputPath) {
         try {
-            // 1. First create frequency map of all characters in transformed sequences
+            // 1. Create frequency map
             Map<Character, Integer> freqMap = new HashMap<>();
-            for (String seq : dnaSequencesDummy) {
+            int totalSequences = 0;  // Track total sequences to encode
+            
+            // First pass: count frequencies and total sequences
+            for (String seq : dnaSequences) {
                 for (char c : seq.toCharArray()) {
-                    freqMap.put(c, freqMap.getOrDefault(c, 0) + 1);
+                    freqMap.merge(c, 1, Integer::sum);
+                    totalSequences++;
                 }
             }
 
@@ -720,58 +724,85 @@ public class SACompression {
             HuffmanTree huffman = new HuffmanTree(freqMap);
             Map<Character, String> huffmanCodes = huffman.getCodes();
 
-            // 3. Write to binary file
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"));
-                    DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
+            boolean isPrefixFree = areCodesPrefixFree(huffmanCodes);
+            System.out.println("Are codes prefix-free? " + isPrefixFree);
 
-                // Write dictionary/code table first
+            // 3. Save dictionary with clear format
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"))) {
                 writer.write("=== SUBSTITUTION TABLE ===\n");
                 for (Map.Entry<String, Character> entry : sequenceToCodeMap.entrySet()) {
                     writer.write(entry.getValue() + ":" + entry.getKey() + "\n");
                 }
-                writer.write("=== HUFFMAN TABLE ===\n");
+                writer.write("\n=== HUFFMAN TABLE ===\n");
                 for (Map.Entry<Character, String> entry : huffmanCodes.entrySet()) {
                     writer.write(entry.getKey() + ":" + entry.getValue() + "\n");
                 }
+            }
 
-                // Convert sequences to bit string using Huffman codes
-                StringBuilder bitString = new StringBuilder();
-                for (String seq : dnaSequencesDummy) {
+            // 4. Save compressed data with proper bit handling
+            try (DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
+                // Write total number of sequences at the start
+                out.writeInt(totalSequences);
+                
+                StringBuilder bitStream = new StringBuilder();
+                int bitsWritten = 0;
+
+                // Process each sequence
+                for (String seq : dnaSequences) {
                     for (char c : seq.toCharArray()) {
-                        bitString.append(huffmanCodes.get(c));
+                        String code = huffmanCodes.get(c);
+                        if (code != null) {
+                            bitStream.append(code);
+                            bitsWritten += code.length();
+                            StringBuilder excessBits = new StringBuilder();
+
+                            if (bitStream.length() >= 8192) {
+                                // Store the excess bits
+                                int excessLength = bitStream.length() - 8192;
+                                if (excessLength > 0) {
+                                    // Append the excess bits to the temporary variable
+                                    excessBits.append(bitStream.substring(8192));
+                                }
+                                
+                                // Write the first 8192 bits to the output
+                                writeBitsExact(out, new StringBuilder(bitStream.substring(0, 8192)), false);
+                                
+                                // Clear the bitStream for the next iteration
+                                bitStream.setLength(0);
+                            }
+                            
+                            // At the start of the next iteration, prepend the excess bits
+                            if (excessBits.length() > 0) {
+                                bitStream.insert(0, excessBits);
+                                excessBits.setLength(0); // Clear the excessBits after prepending
+                            }
+                            // Write in chunks when buffer is large enough
+                            // if (bitStream.length() >= 8192) {
+                            //     writeBitsExact(out, bitStream, false);
+                            //     bitStream.setLength(0);
+                            // }
+                        }
                     }
                 }
 
-                // Write the total number of bits (for handling padding)
-                out.writeInt(bitString.length());
-
-                // Write actual compressed data
-                int padding = 8 - (bitString.length() % 8);
-                if (padding != 8) {
-                    bitString.append("0".repeat(padding));
-                }
-
-                // Convert bit string to bytes and write
-                for (int i = 0; i < bitString.length(); i += 8) {
-                    String byteStr = bitString.substring(i, i + 8);
-                    out.write((byte) Integer.parseInt(byteStr, 2));
+                // Write remaining bits with proper padding
+                if (bitStream.length() > 0) {
+                    writeBitsExact(out, bitStream, true);
                 }
             }
 
-            // After writing all the data, calculate and write file sizes
+            // 5. Print file sizes
             File compressedFile = new File(outputPath + ".bin");
             File dictionaryFile = new File(outputPath + ".dict");
             double compressedSizeKB = (compressedFile.length() + dictionaryFile.length()) / 1024.0;
 
-            // Append size information to the dictionary file
-            try (BufferedWriter sizeWriter = new BufferedWriter(new FileWriter(outputPath + ".dict", true))) {
-                sizeWriter.write("\n=== COMPRESSED SIZE ===\n");
-                sizeWriter.write(String.format("Total compressed size: %.2f KB\n", compressedSizeKB));
-                sizeWriter.write(String.format("Binary file: %.2f KB\n", compressedFile.length() / 1024.0));
-                sizeWriter.write(String.format("Dictionary file: %.2f KB\n", dictionaryFile.length() / 1024.0));
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict", true))) {
+                writer.write("\n=== COMPRESSED SIZE ===\n");
+                writer.write(String.format("Total compressed size: %.2f KB\n", compressedSizeKB));
+                writer.write(String.format("Binary file: %.2f KB\n", compressedFile.length() / 1024.0));
+                writer.write(String.format("Dictionary file: %.2f KB\n", dictionaryFile.length() / 1024.0));
             }
 
-            // Also print to console
             System.out.printf("Compressed files total size: %.2f KB%n", compressedSizeKB);
 
         } catch (IOException e) {
