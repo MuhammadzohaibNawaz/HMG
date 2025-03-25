@@ -22,19 +22,21 @@ import java.io.File;
 import java.io.RandomAccessFile;
 
 public class GACompression {
-
+    private static final int BITS_FOR_LENGTH = 4; // Bits to store the length of the pattern and Huffman code
     private static Map<String, String> patternToBitCode = new HashMap<>();
     private static long totalBases = 0;
 
     public static void main(String[] args) {
         // Define file path to read sequences
-        String combination = "single_single"; // this is used for multiple variants of GA. First parameter (before_) is for crossover and second (after_) for mutation. E.g., use "single_single" for single point crossover and single point mutation.
+        String combination = "single_single"; // this is used for multiple variants of GA. First parameter (before_) is
+                                              // for crossover and second (after_) for mutation. E.g., use
+                                              // "single_single" for single point crossover and single point mutation.
         Map<String, Character> sequenceToCodeMap = new HashMap<>();
         String DS = "sample";// enter dataset name here
         List<String> chromosomeFiles = null;
         String folderPath = null;
         List<String> dnaSequences = new ArrayList<>();
-        folderPath = "Data"; //path to folder
+        folderPath = "Data"; // path to folder
         chromosomeFiles = Arrays.asList(DS);
 
         int maxEntryLength = 1;
@@ -83,10 +85,10 @@ public class GACompression {
 
             } catch (IOException e) {
                 System.err.println("Error reading the file: " + fileName + " - " + e.getMessage());
+                System.exit(1); // Exit the program if the file cannot be read
             }
         }
         long totalBases = 0;
-        long totalBits = 0;
 
         int bitsPerBase = 2; // Each base requires 2 bits
 
@@ -94,7 +96,6 @@ public class GACompression {
             sequence = sequence.trim();
             long sequenceLength = sequence.length();
             totalBases += sequenceLength;
-            totalBits += sequenceLength * bitsPerBase;
         }
 
         int generations = 10;
@@ -134,13 +135,8 @@ public class GACompression {
                 System.out.println("Invalid combination.");
                 System.exit(0); // Exit the program
         }
-        int pss = 0;
-        int consecutiveFailures = 0;
         while (bestSequences.size() < topSubsequences) {
-        
-            pss = bestSequences.size();
 
-            String bestSequence = "";
             int maxOverallOccurrences = 0;
             String bestDnaString = ""; // To hold the actual DNA sequence with the most occurrences
 
@@ -219,7 +215,6 @@ public class GACompression {
                 // Track the overall best sequence across generations
                 if (maxOccurrencesInGeneration > maxOverallOccurrences) {
                     maxOverallOccurrences = maxOccurrencesInGeneration;
-                    bestSequence = bestSequenceInGeneration;
                     bestDnaString = bestDnaInGeneration;
                 }
                 String firstString = null;
@@ -247,7 +242,7 @@ public class GACompression {
                 dna1 = firstString;
                 dna2 = secondString;
             }
-         
+
             // Assign characters other than A, C, T, G for the best sequences
             // Create a StringBuilder to hold characters
             StringBuilder codeBuilder = new StringBuilder();
@@ -270,7 +265,7 @@ public class GACompression {
 
                 // Assign a unique code character for this bestDnaString
                 sequenceToCodeMap.putIfAbsent(bestDnaString, codes[bestSequences.size()]);
-   
+
                 // Replace this bestDnaString in dnaSequencesDummy with its code character
                 for (int i = 0; i < dnaSequences.size(); i++) {
                     String sequence = dnaSequences.get(i);
@@ -280,158 +275,137 @@ public class GACompression {
                 }
 
             }
-            if (pss == bestSequences.size()) {
-                consecutiveFailures++;
-                // Only stop if we fail to find new patterns for several consecutive attempts
-                if (consecutiveFailures >= 5) { // You can adjust this threshold
-                    // System.out.println("No more patterns found after " + consecutiveFailures +
-                            // " attempts, stopping at count: " + bestSequences.size());
-                    break;
+        }
+
+        // Modified pattern selection with dynamic length prioritization
+        List<PatternInfo> sortedPatterns = new ArrayList<>();
+        int i = 0;
+        for (String pattern : bestSequences) {
+            int frequency = bestOccurrences.get(i);
+            int totalFreq = frequency;
+
+            if (pattern.length() >= 2 && totalFreq >= 2) {
+                // Calculate original size (2 bits per base)
+                int originalBits = pattern.length() * 2 * totalFreq;
+
+                // Calculate Huffman-encoded size
+                int huffmanBits = estimateHuffmanSize(pattern, totalFreq);
+
+                // Calculate dictionary overhead (pattern storage + Huffman table entry)
+                int dictionaryOverhead = (pattern.length() * 2) + 8 +
+                        (int) Math.ceil(Math.log(totalFreq) / Math.log(2));
+
+                // Total compression cost
+                int compressedSize = huffmanBits + dictionaryOverhead;
+                int compressionBenefit = originalBits - compressedSize;
+
+                // Combined score considering length, frequency and Huffman efficiency
+                double lengthScore = pattern.length() * 2;
+                double frequencyScore = Math.log(totalFreq) / Math.log(2);
+                double huffmanScore = originalBits / (double) compressedSize; // compression ratio
+                double combinedScore = lengthScore * frequencyScore * huffmanScore;
+
+                // More stringent selection criteria
+                if (combinedScore >= 1 && compressionBenefit > dictionaryOverhead) {
+                    sortedPatterns.add(new PatternInfo(
+                            pattern,
+                            frequency,
+                            compressionBenefit,
+                            combinedScore,
+                            huffmanBits));
                 }
-            } else {
-                consecutiveFailures = 0; // Reset counter when we find a pattern
+            }
+            i++;
+        }
+        // Sort patterns considering Huffman efficiency
+        Collections.sort(sortedPatterns, (a, b) -> {
+            // First compare combined scores
+            int scoreCompare = Double.compare(b.combinedScore, a.combinedScore);
+            if (scoreCompare != 0)
+                return scoreCompare;
+
+            // If scores are equal, compare compression ratios
+            double ratioA = (double) b.compressionBenefit / b.huffmanBits;
+            double ratioB = (double) a.compressionBenefit / a.huffmanBits;
+            return Double.compare(ratioA, ratioB);
+        });
+
+        // Process patterns in phases based on length
+        List<PatternInfo> beneficialPatterns = new ArrayList<>();
+        Set<String> coveredPositions = new HashSet<>();
+
+        // First phase: longer patterns (length >= 6)
+        for (PatternInfo pattern : sortedPatterns) {
+            if (pattern.pattern.length() >= 6 && pattern.compressionBenefit > 100) {
+                beneficialPatterns.add(pattern);
             }
         }
-   
-        if (true) {
-
-            // Modified pattern selection with dynamic length prioritization
-            List<PatternInfo> sortedPatterns = new ArrayList<>();
-            int i = 0;
-            for (String pattern : bestSequences) {
-                int frequency = bestOccurrences.get(i);
-                int totalFreq = frequency;
-
-                if (pattern.length() >= 2 && totalFreq >= 2) {
-                    // Calculate original size (2 bits per base)
-                    int originalBits = pattern.length() * 2 * totalFreq;
-
-                    // Calculate Huffman-encoded size
-                    int huffmanBits = estimateHuffmanSize(pattern, totalFreq);
-
-                    // Calculate dictionary overhead (pattern storage + Huffman table entry)
-                    int dictionaryOverhead = (pattern.length() * 2) + 8 +
-                            (int) Math.ceil(Math.log(totalFreq) / Math.log(2));
-
-                    // Total compression cost
-                    int compressedSize = huffmanBits + dictionaryOverhead;
-                    int compressionBenefit = originalBits - compressedSize;
-
-                    // Combined score considering length, frequency and Huffman efficiency
-                    double lengthScore = pattern.length() * 2;
-                    double frequencyScore = Math.log(totalFreq) / Math.log(2);
-                    double huffmanScore = originalBits / (double) compressedSize; // compression ratio
-                    double combinedScore = lengthScore * frequencyScore * huffmanScore;
-
-                    // More stringent selection criteria
-                    if (combinedScore >= 1 && compressionBenefit > dictionaryOverhead) {
-                        sortedPatterns.add(new PatternInfo(
-                                pattern,
-                                frequency,
-                                compressionBenefit,
-                                combinedScore,
-                                huffmanBits));
-                    }
-                }
-                i++;
+        for (PatternInfo pattern : sortedPatterns) {
+            if (pattern.pattern.length() >= 4 && pattern.pattern.length() < 6
+                    && pattern.compressionBenefit > 150) {
+                beneficialPatterns.add(pattern);
             }
-            // Sort patterns considering Huffman efficiency
-            Collections.sort(sortedPatterns, (a, b) -> {
-                // First compare combined scores
-                int scoreCompare = Double.compare(b.combinedScore, a.combinedScore);
-                if (scoreCompare != 0)
-                    return scoreCompare;
-
-                // If scores are equal, compare compression ratios
-                double ratioA = (double) b.compressionBenefit / b.huffmanBits;
-                double ratioB = (double) a.compressionBenefit / a.huffmanBits;
-                return Double.compare(ratioA, ratioB);
-            });
-
-            // Process patterns in phases based on length
-            List<PatternInfo> beneficialPatterns = new ArrayList<>();
-            Set<String> coveredPositions = new HashSet<>();
-
-            // First phase: longer patterns (length >= 6)
-            for (PatternInfo pattern : sortedPatterns) {
-                if (pattern.pattern.length() >= 6 && pattern.compressionBenefit > 100) {
-                    beneficialPatterns.add(pattern);
-                }
+        }
+        for (PatternInfo pattern : sortedPatterns) {
+            if (pattern.pattern.length() < 4 && pattern.compressionBenefit > 200) { // Higher threshold for
+                                                                                    // shorter patterns
+                beneficialPatterns.add(pattern);
             }
-            for (PatternInfo pattern : sortedPatterns) {
-                if (pattern.pattern.length() >= 4 && pattern.pattern.length() < 6
-                        && pattern.compressionBenefit > 150) {
-                    beneficialPatterns.add(pattern);
-                }
-            }
-            for (PatternInfo pattern : sortedPatterns) {
-                if (pattern.pattern.length() < 4 && pattern.compressionBenefit > 200) { // Higher threshold for
-                                                                                        // shorter patterns
-                    beneficialPatterns.add(pattern);
-                }
-            }
+        }
 
-            // Limit the total number of patterns if needed
-            int maxPatterns = 50; // Adjust this value based on your needs
-            if (beneficialPatterns.size() > maxPatterns) {
-                beneficialPatterns = beneficialPatterns.subList(0, maxPatterns);
-            }
+        // Limit the total number of patterns if needed
+        int maxPatterns = 50; // Adjust this value based on your needs
+        if (beneficialPatterns.size() > maxPatterns) {
+            beneficialPatterns = beneficialPatterns.subList(0, maxPatterns);
+        }
 
-            // Generate and store bit codes for each beneficial pattern
-            for (int j = 0; j < beneficialPatterns.size(); j++) {
-                PatternInfo pattern = beneficialPatterns.get(j);
-                patternToBitCode.put(pattern.pattern, getBitCode(j));
-            }
+        // Generate and store bit codes for each beneficial pattern
+        for (int j = 0; j < beneficialPatterns.size(); j++) {
+            PatternInfo pattern = beneficialPatterns.get(j);
+            patternToBitCode.put(pattern.pattern, getBitCode(j));
+        }
 
-            // Now calculate compressed size with only beneficial patterns
-            long originalBases = 0;
-            long compressedBits = 0;
-            int dictionaryBits = 0;
+        // Now calculate compressed size with only beneficial patterns
 
-            // Calculate dictionary overhead
+        long compressedBits = 0;
+        int dictionaryBits = 0;
+
+        // Calculate dictionary overhead
+        for (PatternInfo pattern : beneficialPatterns) {
+            String bitCode = patternToBitCode.get(pattern.pattern);
+            dictionaryBits += BITS_FOR_LENGTH + (pattern.pattern.length() * bitsPerBase) + 4 + bitCode.length();
+        }
+
+        // Process sequences
+        for (String sequence : dnaSequences) {
+            String processedSeq = sequence;
+
+            // Replace patterns in order of benefit
             for (PatternInfo pattern : beneficialPatterns) {
                 String bitCode = patternToBitCode.get(pattern.pattern);
-                dictionaryBits += 4 + (pattern.pattern.length() * 2) + 4 + bitCode.length();
+                int occurrences = countOccurrences(Arrays.asList(processedSeq), pattern.pattern);
+                compressedBits += occurrences * bitCode.length();
+                processedSeq = processedSeq.replace(pattern.pattern, "");
             }
 
-            // Process sequences
-            for (String sequence : dnaSequences) {
-                originalBases += sequence.length();
-                String processedSeq = sequence;
-
-                // Replace patterns in order of benefit
-                for (PatternInfo pattern : beneficialPatterns) {
-                    String bitCode = patternToBitCode.get(pattern.pattern);
-                    int occurrences = countOccurrences(Arrays.asList(processedSeq), pattern.pattern);
-                    compressedBits += occurrences * bitCode.length();
-                    processedSeq = processedSeq.replace(pattern.pattern, "");
-                }
-
-                // Add bits for remaining bases
-                compressedBits += processedSeq.length() * 2;
-            }
-
-            // Add dictionary overhead
-            long compressedTotalBits = compressedBits + dictionaryBits;
-            double bpb = (double) compressedTotalBits / totalBases;
-
-            // Print results
-            // System.out.println("Original bases: " + originalBases);
-            // System.out.println("Compressed bits: " + compressedBits);
-            // System.out.println("Dictionary bits: " + dictionaryBits);
-            // System.out.println("Total bits: " + compressedTotalBits);
-            System.out.println("Bits per base (BPB): " + bpb);
-
-       
-            // Add file size check after compression
-            File compressedFile = new File(folderPath + "/output/" + DS + "_compressed.bin");
-            File dictionaryFile = new File(folderPath + "/output/" + DS + "_compressed.dict");
-
+            // Add bits for remaining bases
+            compressedBits += processedSeq.length() * 2;
         }
+
+        // Add dictionary overhead
+       
+        // Add file size check after compression
+        File compressedFile = new File(folderPath + "/output/" + DS + "_compressed.bin");
+        File dictionaryFile = new File(folderPath + "/output/" + DS + "_compressed.dict");
 
         // After all pattern replacements and before final statistics
         String outputPath = folderPath + "/output/" + DS + "_compressed";
         encodeAndSaveToOutput(dnaSequences, sequenceToCodeMap, outputPath);
+        
+        long compressedTotalBits = compressedBits + dictionaryBits;
+        double bpb = (double) compressedTotalBits / totalBases;
+
+        System.out.println("Bits per base (BPB): " + bpb);
 
         long endTime = System.currentTimeMillis(); // Get the start time
         double executionTimeInSeconds = (endTime - startTime) / 1000.0;
@@ -504,7 +478,6 @@ public class GACompression {
         Random rand = new Random();
         char[] nucleotides = { 'A', 'C', 'T', 'G' };
 
-
         // Generate length: size 1 with given probability, or size 2-6 otherwise
         int length = rand.nextInt(6) + 2; // Random size between 2 and 6
 
@@ -513,7 +486,7 @@ public class GACompression {
         for (int i = 0; i < length; i++) {
             dna.append(nucleotides[rand.nextInt(4)]); // Randomly select a nucleotide
         }
-         return dna.toString();
+        return dna.toString();
     }
 
     // Function to apply single-point mutation
@@ -611,37 +584,6 @@ public class GACompression {
         return newNucleotide;
     }
 
-    public static double calculateCompressedBPB(
-            Map<String, Character> sequenceToCodeMap,
-            List<String> compressedSequences,
-            int originalBases) {
-
-        // Calculate dictionary overhead
-        int dictionaryBits = 0;
-        for (Map.Entry<String, Character> entry : sequenceToCodeMap.entrySet()) {
-            // For each pattern: pattern length * 2 bits + 8 bits for symbol
-            dictionaryBits += (entry.getKey().length() * 2) + 8;
-        }
-
-        // Calculate compressed sequence size
-        int compressedBits = 0;
-        for (String sequence : compressedSequences) {
-            for (char c : sequence.toCharArray()) {
-                if (c == 'A' || c == 'C' || c == 'T' || c == 'G') {
-                    compressedBits += 2; // Original bases use 2 bits
-                } else {
-                    compressedBits += 8; // Replacement symbols use 8 bits
-                }
-            }
-        }
-
-        // Total bits including dictionary
-        int totalBits = dictionaryBits + compressedBits;
-
-        // Calculate BPB
-        return (double) totalBits / originalBases;
-    }
-
     public static char getNextSymbol(Set<Character> usedSymbols) {
         // Start with printable ASCII characters that aren't DNA bases
         for (char c = 33; c < 127; c++) {
@@ -672,7 +614,6 @@ public class GACompression {
             HuffmanTree huffman = new HuffmanTree(freqMap);
             Map<Character, String> huffmanCodes = huffman.getCodes();
 
-        
             // 3. Save dictionary with clear format
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"))) {
                 writer.write("=== SUBSTITUTION TABLE ===\n");
@@ -779,6 +720,7 @@ public class GACompression {
             out.write(currentByte);
         }
     }
+
     // Helper class for Huffman coding
     private static class HuffmanTree {
         private class Node implements Comparable<Node> {
