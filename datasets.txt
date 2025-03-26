@@ -1,4 +1,4 @@
 dataset 1 (DS1) is obtained from link : https://tinyurl.com/DNAcorpus or http://sweet.ua.pt/pratas/datasets/DNACorpus.zip
 dataset 2 (DS2) is obtained from link : https://github.com/marbl/CHM13
 dataset 3 (DS3) is obtained from link : https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?db=nuccore&id=556503834&report=fasta
-dataset 4 (DS4) is obtained from link : 
+dataset 4 (DS4) is obtained from link : https://www.ncbi.nlm.nih.gov/sra/?term=ERR3307082
