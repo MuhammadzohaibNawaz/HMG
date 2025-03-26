@@ -21,7 +21,7 @@ import java.io.FileOutputStream;
 import java.io.File;
 import java.io.RandomAccessFile;
 
-public class GACompression {
+public class GACompression  {
     private static final int BITS_FOR_LENGTH = 4; // Bits to store the length of the pattern and Huffman code
     private static Map<String, String> patternToBitCode = new HashMap<>();
     private static long totalBases = 0;
@@ -39,7 +39,6 @@ public class GACompression {
         folderPath = "Data"; // path to folder
         chromosomeFiles = Arrays.asList(DS);
 
-        int maxEntryLength = 1;
         boolean probBasedOccurances = true;
         for (String fileName : chromosomeFiles) {
             String filePath = folderPath + "/" + fileName;
@@ -138,8 +137,9 @@ public class GACompression {
         while (bestSequences.size() < topSubsequences) {
 
             int maxOverallOccurrences = 0;
+            int secondMaxOccurrencesInGeneration = 0;
             String bestDnaString = ""; // To hold the actual DNA sequence with the most occurrences
-
+            String secondBestDnaString = "";
             dna1 = generateRandomDNA();
 
             // Generate dna2 and check if it's the same as dna1
@@ -202,21 +202,37 @@ public class GACompression {
                     sequenceStrings.put("Mutated DNA2", mutatedDna2);
                 }
                 // Find the best sequence for this generation
-                String bestSequenceInGeneration = "";
                 String bestDnaInGeneration = "";
                 int maxOccurrencesInGeneration = 0;
+                String secondBestDnaInGeneration = ""; // New variable for the second best
+                //int secondMaxOccurrencesInGeneration = 0; // New variable for the second max occurrences
+
                 for (Map.Entry<String, Integer> entry : sequenceOccurrences.entrySet()) {
                     if (entry.getValue() > maxOccurrencesInGeneration) {
+                        // Update second best before updating the best
+                        secondMaxOccurrencesInGeneration = maxOccurrencesInGeneration;
+                        secondBestDnaInGeneration = bestDnaInGeneration;
+
+                        // Update best
                         maxOccurrencesInGeneration = entry.getValue();
-                        bestSequenceInGeneration = entry.getKey();
                         bestDnaInGeneration = entry.getKey();
+                    } else if (entry.getValue() > secondMaxOccurrencesInGeneration) {
+                        // Update second best only
+                        secondMaxOccurrencesInGeneration = entry.getValue();
+                        secondBestDnaInGeneration = entry.getKey();
                     }
                 }
-                // Track the overall best sequence across generations
+
+                // Track the overall best sequences across generations
                 if (maxOccurrencesInGeneration > maxOverallOccurrences) {
                     maxOverallOccurrences = maxOccurrencesInGeneration;
-                    bestDnaString = bestDnaInGeneration;
+                    bestDnaString = bestDnaInGeneration; // Save the best sequence
                 }
+
+                if (secondMaxOccurrencesInGeneration > 0) { // Ensure there is a valid second best
+                    secondBestDnaString = secondBestDnaInGeneration; // Save the second best sequence
+                }
+
                 String firstString = null;
                 String secondString = null;
                 int firstCount = -1;
@@ -257,14 +273,14 @@ public class GACompression {
             // Convert the StringBuilder to a char array
             char[] codes = codeBuilder.toString().toCharArray();
 
-            // Ensure the best sequence is unique and does not overlap with already stored
-            // sequences
-            if (maxOverallOccurrences != 0) {// && bestDnaString.length() > maxEntryLength) {
+            // Ensure the best and second-best sequences are unique and do not overlap with already stored sequences
+            if (maxOverallOccurrences != 0) { 
+                // Handle the best sequence
                 bestSequences.add(bestDnaString);
                 bestOccurrences.add(maxOverallOccurrences);
 
                 // Assign a unique code character for this bestDnaString
-                sequenceToCodeMap.putIfAbsent(bestDnaString, codes[bestSequences.size()]);
+                sequenceToCodeMap.putIfAbsent(bestDnaString, codes[bestSequences.size() - 1]);
 
                 // Replace this bestDnaString in dnaSequencesDummy with its code character
                 for (int i = 0; i < dnaSequences.size(); i++) {
@@ -273,7 +289,22 @@ public class GACompression {
                     dnaSequences.set(i, sequence.replace(bestDnaString,
                             String.valueOf(sequenceToCodeMap.get(bestDnaString))));
                 }
+            }
+            // Handle the second-best sequence if it exists
+            if (secondMaxOccurrencesInGeneration > 0) { // Ensure there is a valid second best
+                bestSequences.add(secondBestDnaString);
+                bestOccurrences.add(secondMaxOccurrencesInGeneration);
 
+                // Assign a unique code character for this secondBestDnaString
+                sequenceToCodeMap.putIfAbsent(secondBestDnaString, codes[bestSequences.size() - 1]);
+
+                // Replace this secondBestDnaString in dnaSequencesDummy with its code character
+                for (int i = 0; i < dnaSequences.size(); i++) {
+                    String sequence = dnaSequences.get(i);
+                    // Replace all occurrences of secondBestDnaString with its code character
+                    dnaSequences.set(i, sequence.replace(secondBestDnaString,
+                            String.valueOf(sequenceToCodeMap.get(secondBestDnaString))));
+                }
             }
         }
 
