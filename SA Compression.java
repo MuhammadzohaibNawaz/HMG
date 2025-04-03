@@ -1,3 +1,4 @@
+
 package DNA;
 
 import java.io.BufferedWriter;
@@ -29,18 +30,17 @@ public class SACompression {
     public static void main(String[] args) {
         // Define file path to read sequences
 
-        int longestPattern = 5;
         Map<String, Character> sequenceToCodeMap = new HashMap<>();
-        String DS = "BuEb";// enter dataset name here
+        String DS = "dataset";// enter dataset name here
         List<String> chromosomeFiles = null;
         String folderPath = null;
         List<String> dnaSequences = new ArrayList<>();
-        folderPath = "Data/geco/DS5";
+        folderPath = "Data";
         chromosomeFiles = Arrays.asList(DS);
         Scanner scanner = new Scanner(System.in);
         System.out.print("Enter the number of top subsequences (m): ");
         int topSubsequences = scanner.nextInt();
-      
+
         // Simulated Annealing parameters
         double initialTemperature = 100.0;
         double coolingRate = 0.50;
@@ -49,10 +49,7 @@ public class SACompression {
 
         int maxEntryLength = 1;
         boolean probBasedOccurances = true;
-        // Read each chromosome file and combine lines into a single sequence (ignoring
-        // the first line)
-        // Read each chromosome file and combine lines into a single sequence (ignoring
-        // the first line)
+
         for (String fileName : chromosomeFiles) {
             String filePath = folderPath + "/" + fileName;
 
@@ -126,15 +123,6 @@ public class SACompression {
         // System.out.println("Total bases of original data: " + totalBases);
         // System.out.println("Total bits of original data: " + totalBits);
         System.out.println("Original Bases:  " + totalBases + ", Bits: " + totalBits);
-        // Take inputs for the number of generations and the number of top subsequences
-        // (m)
-        //        Scanner scanner = new Scanner(System.in);
-        //        System.out.print("Enter the number of generations (n): ");
-        //        int generations = scanner.nextInt();
-        int generations = 10;
-        // long startTime = System.currentTimeMillis(); // Get the start time
-        // Set to store the unique best sequences (Ensuring no duplicates)
-        System.out.println("Started");
 
         StringBuilder codeBuilder = new StringBuilder();
 
@@ -154,12 +142,7 @@ public class SACompression {
         // List<Integer> bestOccurrences = new ArrayList<>(); // To store corresponding
         // occurrences
 
-        String dna1 = null;
-        String dna2 = null;
-
         while (bestSequences.size() < topSubsequences) {
-
-            System.out.println("Pat: " + (bestSequences.size() + 1));
 
             // int maxOverallOccurrences = 0;
             String bestDnaString = ""; // To hold the actual DNA sequence with the most occurrences
@@ -177,15 +160,15 @@ public class SACompression {
                 int newOccurrences = countOccurrences2(dnaSequences, newSequence);
 
                 // Acceptance probability
-                if (newOccurrences > bestOccurrencess)
-                // || Math.random() < Math.exp((newOccurrences - bestOccurrencess) /
-                // temperature))
-                {
+                if (newOccurrences > bestOccurrencess) {
                     currentSequence = newSequence; // Accept the new sequence
-                    if (newOccurrences > bestOccurrencess) {
-                        bestSequence = newSequence; // Update best sequence
-                        bestOccurrencess = newOccurrences; // Update best occurrences
-                    }
+                    bestSequence = newSequence; // Update best sequence
+                    bestOccurrencess = newOccurrences; // Update best occurrences
+
+                } else if (Math.random() < Math.exp((newOccurrences - bestOccurrencess) / temperature)) {
+                    currentSequence = newSequence; // Accept the new sequence
+                    bestSequence = newSequence; // Update best sequence
+                    bestOccurrencess = newOccurrences; // Update best occurrences
                 }
 
                 // Cool down the temperature
@@ -199,7 +182,6 @@ public class SACompression {
             // Assign characters other than A, C, T, G for the best sequences
             // Create a StringBuilder to hold characters
 
-            System.out.println("Here");
             // Ensure the best sequence is unique and does not overlap with already stored
             // sequences
             if (bestOccurrencess != 0) {// && bestDnaString.length() > maxEntryLength) {
@@ -218,9 +200,7 @@ public class SACompression {
                 }
             }
         }
-        System.out.println(bestSequences + ", " + bestOccurrences);
 
-        // Modified pattern selection with dynamic length prioritization
         List<PatternInfo> sortedPatterns = new ArrayList<>();
         for (int i = 0; i < bestSequences.size(); i++) {
             String pattern = bestSequences.get(i); // Get the pattern from bestSequences
@@ -286,7 +266,6 @@ public class SACompression {
 
         // Process patterns in phases based on length
         List<PatternInfo> beneficialPatterns = new ArrayList<>();
-        Set<String> coveredPositions = new HashSet<>();
 
         // First phase: longer patterns (length >= 6)
         for (PatternInfo pattern : sortedPatterns) {
@@ -310,8 +289,8 @@ public class SACompression {
             }
         }
 
-        // Limit the total number of patterns if needed
-        int maxPatterns = 50; // Adjust this value based on your needs
+        // Limit the total number of patterns if needed (For experimental purposes`)
+        int maxPatterns = 50; // Adjust this value based on your needs )
         if (beneficialPatterns.size() > maxPatterns) {
             beneficialPatterns = beneficialPatterns.subList(0, maxPatterns);
         }
@@ -323,7 +302,6 @@ public class SACompression {
         }
 
         // Now calculate compressed size with only beneficial patterns
-        int originalBases = 0;
         int compressedBits = 0;
         int dictionaryBits = 0;
 
@@ -335,7 +313,6 @@ public class SACompression {
 
         // Process sequences
         for (String sequence : dnaSequences) {
-            originalBases += sequence.length();
             String processedSeq = sequence;
 
             // Replace patterns in order of benefit
@@ -350,30 +327,26 @@ public class SACompression {
             compressedBits += processedSeq.length() * 2;
         }
 
-        // Add dictionary overhead
-        int compressedTotalBits = compressedBits + dictionaryBits;
-        double bpb = (double) compressedTotalBits / totalBases;
-
         // Print results
-        System.out.println("Original bases: " + originalBases);
-        System.out.println("Compressed bits: " + compressedBits);
-        System.out.println("Dictionary bits: " + dictionaryBits);
-        System.out.println("Total bits: " + compressedTotalBits);
-        System.out.println("Bits per base (BPB): " + bpb);
+        // System.out.println("Original bases: " + originalBases);
+        // System.out.println("Compressed bits: " + compressedBits);
+        // System.out.println("Dictionary bits: " + dictionaryBits);
+        // System.out.println("Total bits: " + compressedTotalBits);
 
         // Print pattern details
-        for (PatternInfo pattern : beneficialPatterns) {
-            String bitCode = patternToBitCode.get(pattern.pattern);
-            System.out.printf("Pattern: %s, Frequency: %d, Benefit: %d, Bit code: %s (length: %d)%n",
-                    pattern.pattern, pattern.frequency, pattern.compressionBenefit,
-                    bitCode, bitCode.length());
-        }
+        // for (PatternInfo pattern : beneficialPatterns) {
+        // String bitCode = patternToBitCode.get(pattern.pattern);
+        // System.out.printf("Pattern: %s, Frequency: %d, Benefit: %d, Bit code: %s
+        // (length: %d)%n",
+        // pattern.pattern, pattern.frequency, pattern.compressionBenefit,
+        // bitCode, bitCode.length());
+        // }
 
         // Print the transformed sequences after all replacements
         // System.out.println("\n=== Transformed Database After Replacements ===");
         // for (String sequence : dnaSequencesDummy) {
-        //     System.out.println(sequence.substring(0, Math.min(100, sequence.length())) +
-        //             (sequence.length() > 100 ? "..." : ""));
+        // System.out.println(sequence.substring(0, Math.min(100, sequence.length())) +
+        // (sequence.length() > 100 ? "..." : ""));
         // }
         // System.out.println("===================================\n");
 
@@ -400,11 +373,15 @@ public class SACompression {
         long endTime = System.currentTimeMillis();
         double totalTimeSeconds = (endTime - startTime) / 1000.0;
         double totalTimeMinutes = totalTimeSeconds / 60.0;
-        
+
         // System.out.println1("\nCompression Statistics:");
         // System.out.println("Finished at: " + new java.util.Date());
-        System.out.printf("Total processing time: %.2f seconds (%.2f minutes)%n", 
-            totalTimeSeconds, totalTimeMinutes);
+        int compressedTotalBits = compressedBits + dictionaryBits;
+        double bpb = (double) compressedTotalBits / totalBases;
+        System.out.println("Bits per base (BPB): " + bpb);
+
+        System.out.printf("Total processing time: %.2f seconds (%.2f minutes)%n",
+                totalTimeSeconds, totalTimeMinutes);
     }
 
     // Function to generate random DNA sequence of length between 2 and 6
@@ -439,10 +416,10 @@ public class SACompression {
 
     public static int countOccurrences2(List<String> sequences, String target) {
         int totalOccurrences = 0;
-//System.out.println(sequences);
+        // System.out.println(sequences);
         // Loop over all sequences
         for (String sequence : sequences) {
-            sequence = sequence.trim();  // Clean up leading/trailing spaces if any
+            sequence = sequence.trim(); // Clean up leading/trailing spaces if any
             int sequenceLength = sequence.length();
             int targetLength = target.length();
 
@@ -450,8 +427,8 @@ public class SACompression {
             for (int i = 0; i <= sequenceLength - targetLength; i++) {
                 // Check if the target matches starting from the current position
                 if (sequence.substring(i, i + targetLength).equals(target)) {
-                    //             System.out.print(target+", ");
-                    //           System.out.println(i);
+                    // System.out.print(target+", ");
+                    // System.out.println(i);
                     totalOccurrences++;
                     i = i + targetLength - 1;
                 }
@@ -463,16 +440,16 @@ public class SACompression {
 
     public static int countOccurrences(List<String> sequences, String target) {
         return sequences.parallelStream()
-            .mapToInt(sequence -> {
-                int count = 0;
-                int pos = 0;
-                while ((pos = sequence.indexOf(target, pos)) != -1) {
-                    count++;
-                    pos += target.length();
-                }
-                return count;
-            })
-            .sum();
+                .mapToInt(sequence -> {
+                    int count = 0;
+                    int pos = 0;
+                    while ((pos = sequence.indexOf(target, pos)) != -1) {
+                        count++;
+                        pos += target.length();
+                    }
+                    return count;
+                })
+                .sum();
     }
 
     // Function to generate a neighboring sequence by mutating one base
@@ -490,9 +467,11 @@ public class SACompression {
         // // 50% chance to either add or remove a base
         // if (rand.nextDouble() < 0.1) { // 50% chance to add or remove a base
 
-        //     char newBase = nucleotides[rand.nextInt(4)]; // Randomly select a new nucleotide
-        //     // Insert the new base at the mutation position
-        //     return dna.substring(0, mutationPosition) + newBase + dna.substring(mutationPosition);
+        // char newBase = nucleotides[rand.nextInt(4)]; // Randomly select a new
+        // nucleotide
+        // // Insert the new base at the mutation position
+        // return dna.substring(0, mutationPosition) + newBase +
+        // dna.substring(mutationPosition);
 
         // }
 
@@ -584,7 +563,7 @@ public class SACompression {
     // Function to apply single-point crossover between two DNA sequences
     public static String[] applySinglePointCrossover(String dna1, String dna2) {
         // System.out.println(dna1);
-        //                    System.out.println(dna2);
+        // System.out.println(dna2);
         Random rand = new Random();
 
         // Ensure both sequences have the same length before crossover
@@ -710,8 +689,8 @@ public class SACompression {
         try {
             // 1. Create frequency map
             Map<Character, Integer> freqMap = new HashMap<>();
-            int totalSequences = 0;  // Track total sequences to encode
-            
+            int totalSequences = 0; // Track total sequences to encode
+
             // First pass: count frequencies and total sequences
             for (String seq : dnaSequences) {
                 for (char c : seq.toCharArray()) {
@@ -724,8 +703,8 @@ public class SACompression {
             HuffmanTree huffman = new HuffmanTree(freqMap);
             Map<Character, String> huffmanCodes = huffman.getCodes();
 
-            boolean isPrefixFree = areCodesPrefixFree(huffmanCodes);
-            System.out.println("Are codes prefix-free? " + isPrefixFree);
+            // boolean isPrefixFree = areCodesPrefixFree(huffmanCodes);
+            // System.out.println("Are codes prefix-free? " + isPrefixFree);
 
             // 3. Save dictionary with clear format
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath + ".dict"))) {
@@ -743,7 +722,7 @@ public class SACompression {
             try (DataOutputStream out = new DataOutputStream(new FileOutputStream(outputPath + ".bin"))) {
                 // Write total number of sequences at the start
                 out.writeInt(totalSequences);
-                
+
                 StringBuilder bitStream = new StringBuilder();
                 int bitsWritten = 0;
 
@@ -763,14 +742,14 @@ public class SACompression {
                                     // Append the excess bits to the temporary variable
                                     excessBits.append(bitStream.substring(8192));
                                 }
-                                
+
                                 // Write the first 8192 bits to the output
                                 writeBitsExact(out, new StringBuilder(bitStream.substring(0, 8192)), false);
-                                
+
                                 // Clear the bitStream for the next iteration
                                 bitStream.setLength(0);
                             }
-                            
+
                             // At the start of the next iteration, prepend the excess bits
                             if (excessBits.length() > 0) {
                                 bitStream.insert(0, excessBits);
@@ -778,8 +757,8 @@ public class SACompression {
                             }
                             // Write in chunks when buffer is large enough
                             // if (bitStream.length() >= 8192) {
-                            //     writeBitsExact(out, bitStream, false);
-                            //     bitStream.setLength(0);
+                            // writeBitsExact(out, bitStream, false);
+                            // bitStream.setLength(0);
                             // }
                         }
                     }
@@ -870,37 +849,6 @@ public class SACompression {
         }
     }
 
-    // Add this helper method to estimate Huffman-encoded size
-    private static int estimateHuffmanSize(String sequence, int frequency) {
-        double probability = frequency / (double) totalBases;
-        int bitsNeeded = (int) Math.ceil(-Math.log(probability) / Math.log(2));
-        return bitsNeeded * frequency;
-    }
-
-    // Add this helper method to get reverse complement of a DNA sequence
-    private static String getReverseComplement(String sequence) {
-        StringBuilder reverseComp = new StringBuilder();
-        for (int i = sequence.length() - 1; i >= 0; i--) {
-            char base = sequence.charAt(i);
-            switch (base) {
-                case 'A':
-                    reverseComp.append('T');
-                    break;
-                case 'T':
-                    reverseComp.append('A');
-                    break;
-                case 'C':
-                    reverseComp.append('G');
-                    break;
-                case 'G':
-                    reverseComp.append('C');
-                    break;
-            }
-        }
-        return reverseComp.toString();
-    }
-
-    // Add this new function for cycle crossover
     private static String[] applyCycleCrossover(String dna1, String dna2) {
         int minLength = Math.min(dna1.length(), dna2.length());
         int maxLength = Math.max(dna1.length(), dna2.length());
@@ -951,6 +899,37 @@ public class SACompression {
         };
     }
 
+    private static void writeBitsExact(DataOutputStream out, StringBuilder bitStream, boolean isLast)
+            throws IOException {
+        int remainingBits = bitStream.length();
+        int currentByte = 0;
+        int bitsInCurrentByte = 0;
+
+        for (int i = 0; i < remainingBits; i++) {
+            currentByte = (currentByte << 1) | (bitStream.charAt(i) == '1' ? 1 : 0);
+            bitsInCurrentByte++;
+
+            if (bitsInCurrentByte == 8) {
+                out.write(currentByte);
+                currentByte = 0;
+                bitsInCurrentByte = 0;
+            }
+        }
+
+        // Handle last byte with explicit padding if needed
+        if (isLast && bitsInCurrentByte > 0) {
+            currentByte <<= (8 - bitsInCurrentByte); // Left-align remaining bits
+            out.write(currentByte);
+        }
+    }
+
+    // Add this helper method to estimate Huffman-encoded size
+    private static int estimateHuffmanSize(String sequence, int frequency) {
+        double probability = frequency / (double) totalBases;
+        int bitsNeeded = (int) Math.ceil(-Math.log(probability) / Math.log(2));
+        return bitsNeeded * frequency;
+    }
+
     private static String applyScrambleMutation(String dna) {
         if (dna.length() < 2) {
             return dna; // Can't scramble a sequence of length 0 or 1
@@ -981,5 +960,27 @@ public class SACompression {
         return new String(dnaArray);
     }
 
-}
+    // Add this helper method to get reverse complement of a DNA sequence
+    private static String getReverseComplement(String sequence) {
+        StringBuilder reverseComp = new StringBuilder();
+        for (int i = sequence.length() - 1; i >= 0; i--) {
+            char base = sequence.charAt(i);
+            switch (base) {
+                case 'A':
+                    reverseComp.append('T');
+                    break;
+                case 'T':
+                    reverseComp.append('A');
+                    break;
+                case 'C':
+                    reverseComp.append('G');
+                    break;
+                case 'G':
+                    reverseComp.append('C');
+                    break;
+            }
+        }
+        return reverseComp.toString();
+    }
 
+}
